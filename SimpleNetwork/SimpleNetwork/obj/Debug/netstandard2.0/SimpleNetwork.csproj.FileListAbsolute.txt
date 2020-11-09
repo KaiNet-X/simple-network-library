@@ -1,0 +1,9 @@
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\bin\Debug\netstandard2.0\SimpleNetwork.deps.json
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\bin\Debug\netstandard2.0\SimpleNetwork.dll
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.AssemblyInfoInputs.cache
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.AssemblyInfo.cs
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\bin\Debug\netstandard2.0\SimpleNetwork.pdb
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.csproj.CoreCompileInputs.cache
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.dll
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.pdb
+C:\Users\User\source\repos\SimpleNetwork\SimpleNetwork\obj\Debug\netstandard2.0\SimpleNetwork.csprojAssemblyReference.cache
