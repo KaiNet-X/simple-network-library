@@ -21,7 +21,7 @@ namespace SimpleNetwork
 
         public int UpdateWaitTime = 10000;
         public int UpdateClientWaitTime = 1000;
-        public readonly byte MaxClients;
+        public readonly ushort MaxClients;
 
         public byte ClientCount => (byte)Clients.Count;
         public bool Running { get; private set; } = false;
@@ -36,7 +36,7 @@ namespace SimpleNetwork
 
         public ClientAccessor ReadonlyClients;
 
-        public Server(IPAddress iPAddress, int PortNum, byte MaxClients)
+        public Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
         {
             Address = iPAddress;
             Port = PortNum;
@@ -71,12 +71,12 @@ namespace SimpleNetwork
                         OnClientConnect?.Invoke(c.connectionInfo);
                         c.OnDisconnect += ClientDisconnect;
                         c.UpdateWaitTime = UpdateClientWaitTime;
-
                     }
                     catch (SocketException)
                     {
                         break;
                     }
+                    catch { }
                 }
                 Running = false;
                 ServerSocket.Close();
@@ -98,7 +98,7 @@ namespace SimpleNetwork
         public void StopServer()
         {
             Running = false;
-            ServerSocket.Close();
+            ServerSocket?.Close();
         }
 
         /// <summary>
@@ -130,7 +130,7 @@ namespace SimpleNetwork
         /// <typeparam name="T">Type of object</typeparam>
         /// <param name="obj">Object to send</param>
         /// <param name="index">Index of the client</param>
-        public void SendToOne<T>(T obj, byte index)
+        public void SendToOne<T>(T obj, ushort index)
         {
             Clients[index].SendObject(obj);
         }
@@ -141,7 +141,7 @@ namespace SimpleNetwork
         /// <typeparam name="T">Type of object to look for</typeparam>
         /// <param name="index">Index of client to check</param>
         /// <returns></returns>
-        public bool ClientHasObjectType<T>(byte index)
+        public bool ClientHasObjectType<T>(ushort index)
         {
             return Clients[index].HasObjectType<T>();
         }
@@ -153,7 +153,7 @@ namespace SimpleNetwork
         /// <typeparam name="T">Pulls an object(T) from the client</typeparam>
         /// <param name="index">index of client to pull from</param>
         /// <returns></returns>
-        public T PullFromClient<T>(byte index)
+        public T PullFromClient<T>(ushort index)
         {
             return Clients[index].PullObject<T>();
         }
@@ -164,7 +164,7 @@ namespace SimpleNetwork
         /// <typeparam name="T">Specified object type</typeparam>
         /// <param name="index">index of client to search for</param>
         /// <returns></returns>
-        public T WaitForPullFromClient<T>(byte index)
+        public T WaitForPullFromClient<T>(ushort index)
         {
             return Clients[index].WaitForPullObject<T>();
         }
@@ -191,7 +191,7 @@ namespace SimpleNetwork
         /// </summary>
         /// <param name="index">index of client</param>
         /// <param name="remove">specifies whether the client will be removed</param>
-        public void DisconnectClient(byte index, bool remove = false)
+        public void DisconnectClient(ushort index, bool remove = false)
         {
             Clients[index].Disconnect();
             if (remove)
@@ -208,7 +208,7 @@ namespace SimpleNetwork
         /// <param name="index">idex of client to disconnect</param>
         /// <param name="ctx">disconnection context to tell remote client how to handle disconnection</param>
         /// <param name="remove">specifies whether to remove the client</param>
-        public void DisconnectClient(byte index, DisconnectionContext ctx, bool remove = false)
+        public void DisconnectClient(ushort index, DisconnectionContext ctx, bool remove = false)
         {
             Clients[index].Disconnect(ctx);
             if (remove)
@@ -290,6 +290,7 @@ namespace SimpleNetwork
             ModifyingClientList = false;
 
             if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+
             OnClientDisconnect?.Invoke(ctx, inf);
         }
 

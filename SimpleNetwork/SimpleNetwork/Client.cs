@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Dynamic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -17,23 +17,7 @@ namespace SimpleNetwork
 
         public ConnectionInfo connectionInfo { get; private set; }
 
-        private bool isConnected = false;
-
-        public bool Running 
-        {
-            get
-            {
-                if (isConnected)
-                {
-                    TestConnection();
-                }
-                return isConnected;
-            }
-            private set
-            {
-                isConnected = value;
-            }
-        }
+        public bool Running = true;
         public bool IsConnected { get; private set; } = false;
 
         private bool TryingConnect = false;
@@ -136,7 +120,14 @@ namespace SimpleNetwork
 
                             connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
 
-                            OnConnect?.Invoke(connectionInfo);
+                            try
+                            {
+                                OnConnect?.Invoke(connectionInfo);
+                            }
+                            catch
+                            {
+
+                            }
                         }
                     }
                     catch (SocketException)
@@ -224,7 +215,14 @@ namespace SimpleNetwork
         public void SendObject<T>(T obj)
         {
             if (IsConnected)
-                Connection.Send(JsonObjectParser.JsonToBytes(JsonObjectParser.ObjectToJson(obj) + ";"));
+            {
+                List<byte> bytes = new List<byte>(ObjectParser.ObjectToBytes(obj));
+                // string s = ObjectParser.BytesToJson(bytes.ToArray());
+                bytes.AddRange(ObjectParser.ObjectToBytes(";"));
+                // s = ObjectParser.BytesToJson(bytes.ToArray());
+                Connection.Send(bytes.ToArray());
+            }
+                //Connection.Send(ObjectParser.JsonToBytes(ObjectParser.ObjectToJson(obj) + ";"));
         }
 
         /// <summary>
@@ -237,13 +235,13 @@ namespace SimpleNetwork
         {
             for (int i = 0; i < ObjectQueue.Count; i++)
             {
-                if (JsonObjectParser.IsType<T>(ObjectQueue[i]))
+                if (ObjectParser.IsType<T>(ObjectQueue[i]))
                 {
                     byte[] bytes = ObjectQueue[i];
 
                     ObjectQueue.RemoveAt(i);
 
-                    return JsonObjectParser.BytesToObject<T>(bytes);
+                    return ObjectParser.BytesToObject<T>(bytes);
                 }
             }
             return default;
@@ -260,13 +258,13 @@ namespace SimpleNetwork
             {
                 for (int i = 0; i < ObjectQueue.Count; i++)
                 {
-                    if (JsonObjectParser.IsType<T>(ObjectQueue[i]))
+                    if (ObjectParser.IsType<T>(ObjectQueue[i]))
                     {
                         byte[] bytes = ObjectQueue[i];
 
                         ObjectQueue.RemoveAt(i);
 
-                        return JsonObjectParser.BytesToObject<T>(bytes);
+                        return ObjectParser.BytesToObject<T>(bytes);
                     }
                 }
                 Thread.Sleep(UpdateWaitTime);
@@ -284,71 +282,12 @@ namespace SimpleNetwork
         {
             for (int i = 0; i < ObjectQueue.Count; i++)
             {
-                if (JsonObjectParser.IsType<T>(ObjectQueue[i]))
+                if (ObjectParser.IsType<T>(ObjectQueue[i]))
                 {
                     return true;
                 }
             }
             return false;
-        }
-
-        private void RecieveDeprecated()
-        {
-            try
-            {
-                if (IsConnected && Connection.Available > 0)
-                {
-                    byte[] get = new byte[Connection.Available];
-                    int ConnectCheck = Connection.Receive(get);
-
-                    string json = JsonObjectParser.BytesToJson(get);
-                    List<string> Sections = new List<string>(json.Split(';'));
-
-                    for (int i = 0; i < Sections.Count; i++)
-                    {
-                        if (Sections[i] == "" || Sections[i] == "\"\"")
-                        {
-                            Sections.RemoveAt(i);
-                            i--;
-                        }
-                    }
-
-                    for (int i = 0; i < Sections.Count; i++)
-                    {
-                        string j = Sections[i];
-                        byte[] b = JsonObjectParser.JsonToBytes(j);
-
-                        if (JsonObjectParser.IsType<DisconnectionContext>(b))
-                        {
-                            DisconnectionContext ctx = JsonObjectParser.JsonToObject<DisconnectionContext>(j);
-                            DisconnectionMode = ctx;
-
-                            Running = false;
-                            IsConnected = false;
-
-                            OnDisconnect?.Invoke(ctx, connectionInfo);
-
-                            if (ctx.type == DisconnectionContext.DisconnectionType.REMOVE)
-                            {
-                                Clear();
-                            }
-                            else
-                            {
-                                Connection.Close();
-                            }
-                            return;
-                        }
-                        else
-                        {
-                            ObjectQueue.Add(b);
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
-            }
         }
 
         private void Recieve()
@@ -359,41 +298,38 @@ namespace SimpleNetwork
                 {
                     byte[] bytes = GetAllBytes();
 
-                    string json = JsonObjectParser.BytesToJson(bytes);
-                    List<string> Sections = new List<string>(json.Split(';'));
-
-                    for (int i = 0; i < Sections.Count; i++)
+                    if (bytes != null)
                     {
-                        if (Sections[i] == "" || Sections[i] == "\"\"")
-                        {
-                            Sections.RemoveAt(i);
-                            i--;
-                        }
-                    }
+                        string json = ObjectParser.BytesToJson(bytes);
 
-                    for (int i = 0; i < Sections.Count; i++)
-                    {
-                        string j = Sections[i];
-                        byte[] b = JsonObjectParser.JsonToBytes(j);
+                        List<string> Sections = json.Split(new string[] { "\";\"" }, StringSplitOptions.None).Where(x => x != "" && x.Trim('"').Length > 0).ToList();
 
-                        if (JsonObjectParser.IsType<DisconnectionContext>(b))
+                        for (int i = 0; i < Sections.Count; i++)
                         {
-                            DisconnectionContext ctx = JsonObjectParser.JsonToObject<DisconnectionContext>(j);
-                            DisconnectedFrom(ctx);
+                            string j = Sections[i];
+                            byte[] b = ObjectParser.JsonToBytes(j);
 
-                            return;
-                        }
-                        else
-                        {
-                            ObjectQueue.Add(b);
+                            if (ObjectParser.IsType<DisconnectionContext>(b))
+                            {
+                                DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(b);
+                                DisconnectedFrom(ctx);
+
+                                return;
+                            }
+                            else
+                            {
+                                ObjectQueue.Add(b);
+                            }
                         }
                     }
                 }
             }
             catch (SocketException)
             {
+                Running = false;
                 DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
             }
+            catch (ObjectDisposedException) { }
         }
 
         private byte[] GetAllBytes()
@@ -407,32 +343,29 @@ namespace SimpleNetwork
                 while (Connection.Available == 0) ;
                 byte[] bytes = new byte[Connection.Available];
 
-                Connection.Receive(bytes);
-                string json = JsonObjectParser.BytesToJson(bytes);
+                int RecievedBytes = Connection.Receive(bytes);
+                string json = ObjectParser.BytesToJson(bytes);
 
-                if (json[json.Length - 1] == '}' || json[json.Length - 1] == ';')
+                if (json.Trim('"') != "")
+                {
+                    if (RecievedBytes < 65536) CompleteObject = true;
+                    FullObject.AddRange(bytes);
+                }
+                else if (FullObject.Count == 0)
                 {
                     CompleteObject = true;
                 }
-                FullObject.AddRange(bytes);
             }
 
             return FullObject.ToArray();
         }
 
-        private void TestConnection()
+        private void ManagementLoop()
         {
-            if (IsConnected)
+            while (IsConnected)
             {
-                try
-                {
-                    SendObject("");
-                }
-                catch
-                {
-                    DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
-                    return;
-                }
+                Recieve();
+                Thread.Sleep(UpdateWaitTime);
             }
         }
 
@@ -445,7 +378,14 @@ namespace SimpleNetwork
 
             DisconnectionMode = ctx;
 
-            OnDisconnect?.Invoke(DisconnectionMode, connectionInfo);
+            try
+            {
+                OnDisconnect?.Invoke(DisconnectionMode, connectionInfo);
+            }
+            catch
+            {
+
+            }
 
             Connection?.Close();
 
@@ -454,17 +394,7 @@ namespace SimpleNetwork
             if (remove)
             {
                 Running = false;
-                ObjectQueue.Clear();
-            }
-        }
-
-        private void ManagementLoop()
-        {
-            while (IsConnected)
-            {
-                TestConnection();
-                Recieve();
-                Thread.Sleep(UpdateWaitTime);
+                ObjectQueue?.Clear();
             }
         }
     }

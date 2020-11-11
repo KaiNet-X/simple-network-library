@@ -3,6 +3,7 @@ using Xunit;
 using SimpleNetwork;
 using System.Net;
 using System.Threading;
+using System.Diagnostics;
 
 namespace NetworkingTest
 {
@@ -16,199 +17,295 @@ namespace NetworkingTest
 
         int SleepTime = 4000;
 
+        GlobalDefaults.EncodingType enc = GlobalDefaults.EncodingType.JSON;
+
         [Fact]
         public void ClientConnectsToServer()
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 1);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
 
             Client c = new Client();
-            c.Connect(IPAddress.Loopback, 6669);
+            c.Connect(IPAddress.Loopback, PortGet(0));
 
-            Thread.Sleep(SleepTime);
+            while (s.ClientCount < 1) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            Assert.True(s.ClientCount == 1);
+            try
+            {
+                Assert.True(s.ClientCount == 1);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Fact]
         public void ClientDisconnectsFromServer()
         {
-            Server s = new Server(IPAddress.Loopback, 6666, 1);
+            SetGlobalDefaults();
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
             s.OnClientDisconnect += S_OnClientDisconnect;
             s.UpdateWaitTime = 0;
 
             Client c = new Client();
-            c.Connect(IPAddress.Loopback, 6666);
+            c.Connect(IPAddress.Loopback, PortGet(0));
             //c.UpdateWaitTime = 0;
 
             c.Disconnect();
-            Thread.Sleep(SleepTime);
+            while (!ClientDisconnectInvoked) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            Assert.True(ClientDisconnectInvoked);
+            try
+            {
+                Assert.True(ClientDisconnectInvoked);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Fact]
         public void ServerDisconnectsClient()
         {
-            Server s = new Server(IPAddress.Loopback, 6667, 1);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
 
             Client c = new Client();
-            c.Connect(IPAddress.Loopback, 6667);
+            c.Connect(IPAddress.Loopback, PortGet(0));
             c.OnDisconnect += C_OnDisconnect;
-
-            Thread.Sleep(SleepTime);
+            c.UpdateWaitTime = 0;
 
             s.DisconnectAllClients();
 
-            Thread.Sleep(SleepTime);
+            while (!ServerDisconnectedClient) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            Assert.True(ServerDisconnectedClient);
+            try
+            {
+                Assert.True(ServerDisconnectedClient);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Theory]
-        [InlineData(5)]
+        [InlineData(4)]
         void ServerDisconnectsMultipleClients(byte clients)
         {
-            Server s = new Server(IPAddress.Loopback, 6668, clients);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), clients);
             s.StartServer();
 
             Client[] Clients = new Client[clients];
             for (int i = 0; i < clients; i++)
             {
                 Clients[i] = new Client();
-                Clients[i].Connect(IPAddress.Loopback, 6668);
+                Clients[i].Connect(IPAddress.Loopback, PortGet(0));
                 Clients[i].OnDisconnect += TestClass_OnDisconnect;
+                Clients[i].UpdateWaitTime = 0;
             }
             s.DisconnectAllClients();
-            Thread.Sleep(SleepTime);
+            while (clientsDown < clients) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            Assert.True(clientsDown == clients);
+            try
+            {
+                Assert.Equal(clients, clientsDown);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Theory]
         [InlineData(456.2346)]
-        [InlineData(6969)]
+        [InlineData(255)]
         //[InlineData("PEEN")]
         void ClientRecievesObjects<T>(T obj)
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 1);
+            SetGlobalDefaults();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
 
             Client c = new Client();
-            c.Connect(IPAddress.Loopback, 6669);
+            c.Connect(IPAddress.Loopback, PortGet(0));
             c.UpdateWaitTime = 0;
-
-            Thread.Sleep(SleepTime);
 
             s.SendToAll(obj);
 
             T objec = c.WaitForPullObject<T>();
 
-            Thread.Sleep(SleepTime);
-
-            Assert.Equal(obj, objec);
-            s.Close();
-            c.Clear();
+            try
+            {
+                Assert.Equal(obj, objec);
+            }
+            finally
+            {
+                s.Close();
+                c?.Clear();
+                Wait();
+            }
         }
 
         [Theory]
         [InlineData(55, 9.999e9)]
         void ServerRecievesObjectsFromClients<T1, T2>(T1 Test1, T2 Test2)
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 2);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 2);
             s.StartServer();
 
             Client c1 = new Client();
-            c1.Connect(IPAddress.Loopback, 6669);
+            c1.Connect(IPAddress.Loopback, PortGet(0));
 
             Client c2 = new Client();
-            c2.Connect(IPAddress.Loopback, 6669);
+            c2.Connect(IPAddress.Loopback, PortGet(0));
 
             c1.SendObject<T1>(Test1);
             c2.SendObject<T2>(Test2);
 
-            T1 o1 = s.WaitForPullFromClient<T1>(0);
-            T2 o2 = s.WaitForPullFromClient<T2>(1);
+            while (!s.ClientHasObjectType<T1>(0) || !s.ClientHasObjectType<T2>(1)) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            Assert.True(Test1.Equals(o1) && Test2.Equals(o2));
+            T1 o1 = s.PullFromClient<T1>(0);
+            T2 o2 = s.PullFromClient<T2>(1);
+            try
+            {
+                Assert.True(Test1.Equals(o1) && Test2.Equals(o2));
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Fact]
         void ClientKeepsDataAfterDisconnect()
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 1);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
 
             Client c1 = new Client();
-            c1.Connect(IPAddress.Loopback, 6669);
-
-            Thread.Sleep(250);
+            c1.Connect(IPAddress.Loopback, PortGet(0));
 
             s.SendToAll("GIN");
 
-            Thread.Sleep(SleepTime);
+            while (!c1.HasObjectType<string>()) if (S.ElapsedMilliseconds >= SleepTime) break;
 
             c1.Disconnect();
 
-            Assert.Equal("GIN", c1.PullObject<object>());
+            try
+            {
+                Assert.Equal("GIN", c1.PullObject<object>());
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Fact]
         void ServerHoldsToClientCap()
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 2);
+            SetGlobalDefaults();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 2);
             s.StartServer();
 
             Client c1 = new Client();
-            c1.BeginConnect(IPAddress.Loopback, 6669);
+            c1.BeginConnect(IPAddress.Loopback, PortGet(0));
 
             Client c2 = new Client();
-            c2.BeginConnect(IPAddress.Loopback, 6669);
+            c2.BeginConnect(IPAddress.Loopback, PortGet(0));
 
             Client c3 = new Client();
-            c3.BeginConnect(IPAddress.Loopback, 6669);
+            c3.BeginConnect(IPAddress.Loopback, PortGet(0));
 
             Thread.Sleep(SleepTime);
 
-            Assert.Equal(2, s.ClientCount);
+            try
+            {
+                Assert.Equal(2, s.ClientCount);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         [Fact]
         void ServerRestartsOnDisconnect()
         {
-            Server s = new Server(IPAddress.Loopback, 6669, 2);
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 2);
             s.StartServer();
             s.RestartAutomatically = true;
             s.OnClientDisconnect += TestClass_OnDisconnect;
-            s.UpdateWaitTime = 0;
-            s.UpdateClientWaitTime = 0;
+            s.UpdateClientWaitTime = 100;
 
             Client c1 = new Client();
-            c1.BeginConnect(IPAddress.Loopback, 6669);
-            //c1.OnDisconnect += TestClass_OnDisconnect;
-            c1.OnConnect += C1_OnConnect;
-            c1.UpdateWaitTime = 0;
+            //c1.OnConnect += C1_OnConnect;
+            c1.UpdateWaitTime = 100;
+            c1.Connect(IPAddress.Loopback, PortGet(0));
 
             Client c2 = new Client();
-            c2.BeginConnect(IPAddress.Loopback, 6669);
+            c2.BeginConnect(IPAddress.Loopback, PortGet(0));
 
             Client c3 = new Client();
-            c3.BeginConnect(IPAddress.Loopback, 6669);
+            c3.BeginConnect(IPAddress.Loopback, PortGet(0));
 
-            Thread.Sleep(SleepTime);
+            c1.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
+            while (clientsDown == 0) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            c1.Disconnect();
-            Thread.Sleep(SleepTime);
-
-            Assert.True(clientsDown == 1 && s.ClientCount == 2);
-        }
-
-        [Fact]
-        void ServerDetectsForcibleDisconnection()
-        {
-            Client c = new Client();
+            try
+            {
+                Assert.True(clientsDown == 1 && s.ClientCount == 2);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
         }
 
         private void C1_OnConnect(ConnectionInfo inf)
@@ -227,6 +324,20 @@ namespace NetworkingTest
         private void S_OnClientDisconnect(DisconnectionContext ctx, ConnectionInfo inf)
         {
             ClientDisconnectInvoked = true;
+        }
+
+        private int PortGet(int id)
+        {
+            return id + 6669;
+        }
+
+        private void SetGlobalDefaults()
+        {
+            GlobalDefaults.ObjectEncodingType = enc;
+        }
+        private void Wait()
+        {
+            Thread.Sleep(100);
         }
     }
 }
