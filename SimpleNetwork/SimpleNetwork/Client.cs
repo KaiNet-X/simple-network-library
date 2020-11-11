@@ -344,16 +344,23 @@ namespace SimpleNetwork
                 byte[] bytes = new byte[Connection.Available];
 
                 int RecievedBytes = Connection.Receive(bytes);
-                string json = ObjectParser.BytesToJson(bytes);
 
-                if (json.Trim('"') != "")
+                try
                 {
-                    if (RecievedBytes < 65536) CompleteObject = true;
-                    FullObject.AddRange(bytes);
+                    string json = ObjectParser.BytesToJson(bytes);
+                    if (json.Trim('"') != "")
+                    {
+                        if (RecievedBytes < 65536) CompleteObject = true;
+                        FullObject.AddRange(bytes);
+                    }
+                    else if (FullObject.Count == 0)
+                    {
+                        CompleteObject = true;
+                    }
                 }
-                else if (FullObject.Count == 0)
+                catch(Exception ex)
                 {
-                    CompleteObject = true;
+                    FullObject.AddRange(bytes);
                 }
             }
 
