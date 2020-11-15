@@ -1,16 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using SimpleNetwork;
-using Newtonsoft.Json;
-using System.Runtime.CompilerServices;
 using System.Diagnostics;
 
 namespace FormsTest
@@ -22,7 +14,7 @@ namespace FormsTest
         public Form1()
         {
             InitializeComponent();
-            GlobalDefaults.ObjectEncodingType = GlobalDefaults.EncodingType.JSON;
+            GlobalDefaults.ObjectEncodingType = GlobalDefaults.EncodingType.MESSAGE_PACK;
             s = new Server(IPAddress.Parse("192.168.0.17"), 9573, 5);
             s.RestartAutomatically = true;
             s.StartServer();
@@ -31,10 +23,11 @@ namespace FormsTest
 
         private void S_OnClientConnect(ConnectionInfo inf)
         {
-            pictureBox1.Image = GetBitmap(s.WaitForPullFromClient<color[,]>((byte)(s.ClientCount - 1)));
+            pictureBox1.Image = GetBitmap(s.WaitForPullFromClient<color[,]>((ushort)(s.ClientCount - 1)));
             MessageBox.Show(((float)sw.ElapsedMilliseconds / 1000).ToString());
             sw.Stop();
             sw.Reset();
+            MessageBox.Show(s.WaitForPullFromClient<string>((ushort)(s.ClientCount - 1)));
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -47,6 +40,7 @@ namespace FormsTest
             color[,] colorMen = GetPixels(bmp);
             sw.Start();
             c.SendObject<color[,]>(colorMen);
+            c.SendObject("HALOOOOO");
             c.Disconnect();
         }
 

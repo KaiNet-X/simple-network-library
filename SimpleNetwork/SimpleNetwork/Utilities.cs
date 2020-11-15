@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Text;
+using System.Linq;
 
 namespace SimpleNetwork
 {
@@ -46,6 +48,37 @@ namespace SimpleNetwork
             //    }
             //}
             return cleanJson;
+        }
+
+        public static int IndexInByteArray(byte[] Bytes, byte[] SearchBytes, int offset = 0)
+        {
+            int index = -1;
+
+            for (int i = offset; i <= Bytes.Length - SearchBytes.Length; i++)
+            {
+                if (Bytes.Skip(i).Take(SearchBytes.Length).SequenceEqual(SearchBytes))
+                {
+                    index = i;
+                    break;
+                }
+            }
+            return index;
+        }
+
+        public static bool ByteArrayContains(byte[] Bytes, byte[] SearchBytes)
+        {
+            bool sequenceFound = false;
+
+            for (int i = 0; i <= Bytes.Length - SearchBytes.Length; i++)
+            {
+                if (Bytes.Skip(i).Take(SearchBytes.Length).SequenceEqual(SearchBytes))
+                {
+                    sequenceFound = true;
+                    break;
+                }
+            }
+
+            return sequenceFound;
         }
     }
 }

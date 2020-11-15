@@ -17,7 +17,7 @@ namespace NetworkingTest
 
         int SleepTime = 4000;
 
-        GlobalDefaults.EncodingType enc = GlobalDefaults.EncodingType.JSON;
+        GlobalDefaults.EncodingType enc = GlobalDefaults.EncodingType.MESSAGE_PACK;
 
         [Fact]
         public void ClientConnectsToServer()

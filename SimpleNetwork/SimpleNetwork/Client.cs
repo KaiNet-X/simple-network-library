@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace SimpleNetwork
@@ -35,6 +36,8 @@ namespace SimpleNetwork
         /// Triggered when the BeginConnect finishes
         /// </summary>
         public event Connected OnConnect;
+
+        private readonly object LockObject = new object();
 
         internal Client(Socket s)
         {
@@ -178,11 +181,12 @@ namespace SimpleNetwork
             DisconnectionMode = ctx;
             IsConnected = false;
 
-            if (ctx.type == DisconnectionContext.DisconnectionType.REMOVE)
-            {
-                Running = false;
-                ObjectQueue.Clear();
-            }
+            lock (LockObject)
+                if (ctx.type == DisconnectionContext.DisconnectionType.REMOVE)
+                {
+                    Running = false;
+                    ObjectQueue.Clear();
+                }
         }
 
         /// <summary>
@@ -203,8 +207,11 @@ namespace SimpleNetwork
             IsConnected = false;
             Running = false;
 
-            ObjectQueue.Clear();
-            ObjectQueue = null;
+            lock (LockObject)
+            {
+                ObjectQueue.Clear();
+                ObjectQueue = null;
+            }
         }
 
         /// <summary>
@@ -214,15 +221,11 @@ namespace SimpleNetwork
         /// <param name="obj">Object of any type</param>
         public void SendObject<T>(T obj)
         {
-            if (IsConnected)
-            {
-                List<byte> bytes = new List<byte>(ObjectParser.ObjectToBytes(obj));
-                // string s = ObjectParser.BytesToJson(bytes.ToArray());
-                bytes.AddRange(ObjectParser.ObjectToBytes(";"));
-                // s = ObjectParser.BytesToJson(bytes.ToArray());
-                Connection.Send(bytes.ToArray());
-            }
-                //Connection.Send(ObjectParser.JsonToBytes(ObjectParser.ObjectToJson(obj) + ";"));
+            lock(LockObject)
+                if (IsConnected)
+                {
+                    Connection.Send(PacketHeader.AddHeadders(ObjectParser.ObjectToBytes(obj)));
+                }
         }
 
         /// <summary>
@@ -233,28 +236,7 @@ namespace SimpleNetwork
         /// <returns>First occurrence of T in queue. If it does not exist, return default.</returns>
         public T PullObject<T>()
         {
-            for (int i = 0; i < ObjectQueue.Count; i++)
-            {
-                if (ObjectParser.IsType<T>(ObjectQueue[i]))
-                {
-                    byte[] bytes = ObjectQueue[i];
-
-                    ObjectQueue.RemoveAt(i);
-
-                    return ObjectParser.BytesToObject<T>(bytes);
-                }
-            }
-            return default;
-        }
-
-        /// <summary>
-        /// Waits until there is an object(T), and then pulls it.
-        /// </summary>
-        /// <typeparam name="T">Type of object to pull</typeparam>
-        /// <returns>object(T)</returns>
-        public T WaitForPullObject<T>()
-        {           
-            while (Running)
+            lock(LockObject)
             {
                 for (int i = 0; i < ObjectQueue.Count; i++)
                 {
@@ -267,9 +249,33 @@ namespace SimpleNetwork
                         return ObjectParser.BytesToObject<T>(bytes);
                     }
                 }
+                return default;
+            }
+        }
+
+        /// <summary>
+        /// Waits until there is an object(T), and then pulls it.
+        /// </summary>
+        /// <typeparam name="T">Type of object to pull</typeparam>
+        /// <returns>object(T)</returns>
+        public T WaitForPullObject<T>()
+        {
+            while (Running)
+            {
+                lock (LockObject)
+                    for (int i = 0; i < ObjectQueue.Count; i++)
+                    {
+                        if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                        {
+                            byte[] bytes = ObjectQueue[i];
+
+                            ObjectQueue.RemoveAt(i);
+
+                            return ObjectParser.BytesToObject<T>(bytes);
+                        }
+                    }
                 Thread.Sleep(UpdateWaitTime);
             }
-
             return PullObject<T>();
         }
 
@@ -280,17 +286,20 @@ namespace SimpleNetwork
         /// <returns></returns>
         public bool HasObjectType<T>()
         {
-            for (int i = 0; i < ObjectQueue.Count; i++)
+            lock(LockObject)
             {
-                if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                for (int i = 0; i < ObjectQueue.Count; i++)
                 {
-                    return true;
+                    if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                    {
+                        return true;
+                    }
                 }
-            }
-            return false;
+                return false;
+            }    
         }
 
-        private void Recieve()
+        private void Recieve2()
         {
             try
             {
@@ -318,7 +327,47 @@ namespace SimpleNetwork
                             }
                             else
                             {
-                                ObjectQueue.Add(b);
+                                lock (LockObject)
+                                    ObjectQueue.Add(b);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (SocketException)
+            {
+                Running = false;
+                DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
+            }
+            catch (ObjectDisposedException) { }
+        }
+        private void Recieve()
+        {
+            try
+            {
+                if (IsConnected && Connection.Available > 0)
+                {
+                    List<byte[]> objects = GetAllBytes3();
+
+                    if (objects.Count > 0)
+                    {
+
+                        for (int i = 0; i < objects.Count; i++)
+                        {
+                            string j = ObjectParser.BytesToJson(objects[i]);
+                            byte[] b = objects[i];
+
+                            if (ObjectParser.IsType<DisconnectionContext>(b))
+                            {
+                                DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(b);
+                                DisconnectedFrom(ctx);
+
+                                return;
+                            }
+                            else
+                            {
+                                lock (LockObject)
+                                    ObjectQueue.Add(b);
                             }
                         }
                     }
@@ -332,7 +381,7 @@ namespace SimpleNetwork
             catch (ObjectDisposedException) { }
         }
 
-        private byte[] GetAllBytes()
+        private byte[] GetAllBytes2()
         {
             List<byte> FullObject = new List<byte>();
 
@@ -365,6 +414,63 @@ namespace SimpleNetwork
             }
 
             return FullObject.ToArray();
+        }
+        private byte[] GetAllBytes()
+        {
+            List<byte> FullObject = new List<byte>();
+
+            bool CompleteObject = false;
+
+            while (!CompleteObject && Running)
+            {
+                while (Connection.Available == 0) ;
+                byte[] Buffer = new byte[Connection.Available];
+
+                Connection.Receive(Buffer);
+
+                PacketHeader h = PacketHeader.GetHeader(Buffer);
+                FullObject.AddRange(PacketHeader.RemoveHeader(Buffer));
+                if (h.FinalPacket)
+                    CompleteObject = true;
+            }
+            return FullObject.ToArray();
+        }
+        private List<byte[]> GetAllBytes3()
+        {
+            List<byte[]> Objects = new List<byte[]>();
+            List<byte> FullObject = new List<byte>();
+
+            bool CompleteObject = false;
+
+            while (!CompleteObject && Running)
+            {
+                while (Connection.Available == 0) ;
+                byte[] Buffer = new byte[Connection.Available];
+
+                int RecievedBytes = Connection.Receive(Buffer);
+
+                if (RecievedBytes < 65536)
+                {
+                    List<PacketHeader> headers;
+                    List<byte[]> objects = PacketHeader.GetObjects(Buffer, out headers);
+                    FullObject.AddRange(objects[0]);
+                    objects.RemoveAt(0);
+                    Objects.Add(FullObject.ToArray());
+                    foreach (byte[] ob in objects)
+                    {
+                        Objects.Add(ob);
+                    }
+                    CompleteObject = true;
+                }
+                else
+                {
+                    PacketHeader h = PacketHeader.GetHeader(Buffer);
+                    FullObject.AddRange(PacketHeader.RemoveHeader(Buffer));
+                    if (h.FinalPacket)
+                        CompleteObject = true;
+                }
+            }
+            return Objects;
         }
 
         private void ManagementLoop()

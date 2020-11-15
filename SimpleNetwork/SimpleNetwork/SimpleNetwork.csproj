@@ -7,9 +7,9 @@
     <Company>KaiNet</Company>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/KaiNet-X/simple-network-library</RepositoryUrl>
-    <PackageTags>socket, sockets, network, networking, tcp, network, network library, networking library</PackageTags>
+    <PackageTags>socket, sockets, network, networking, tcp, network</PackageTags>
     <PackageId>KaiNet.SimpleNetwork</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
