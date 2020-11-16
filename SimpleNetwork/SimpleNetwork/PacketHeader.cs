@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Text;
-using MessagePack;
 using Newtonsoft.Json;
 
 namespace SimpleNetwork
@@ -10,12 +9,12 @@ namespace SimpleNetwork
         [JsonProperty]
         internal readonly string UniqueTypeIdentifyer = "0xFFDD6969";
         [JsonProperty]
-        internal readonly byte Index;
+        internal readonly int Index;
         [JsonProperty]
         internal readonly bool FinalPacket;
 
         [JsonConstructor]
-        internal PacketHeader(byte Index, bool FinalPacket)
+        internal PacketHeader(int Index, bool FinalPacket)
         {
             this.Index = Index;
             this.FinalPacket = FinalPacket;
@@ -28,7 +27,7 @@ namespace SimpleNetwork
 
             List<string> headersJson = new List<string>();
 
-            for (byte i = 0; i < packetCount; i++)
+            for (int i = 0; i < packetCount; i++)
             {
                 string s = JsonConvert.SerializeObject(new PacketHeader(i, i == packetCount - 1));
                 headersLength += s.Length;
@@ -40,8 +39,8 @@ namespace SimpleNetwork
             {
                 packetCount = newCount;
                 headersJson.RemoveAt(headersJson.Count - 1);
-                headersJson.Add(MessagePackSerializer.SerializeToJson(new PacketHeader((byte)headersJson.Count, false), MessagePackSerializerOptions.Standard));
-                headersJson.Add(MessagePackSerializer.SerializeToJson(new PacketHeader((byte)headersJson.Count, true), MessagePackSerializerOptions.Standard));
+                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, false)));
+                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, true)));
             }
             List<byte> FullObject = new List<byte>(Data);
             for (int i = 0; i < packetCount; i++)

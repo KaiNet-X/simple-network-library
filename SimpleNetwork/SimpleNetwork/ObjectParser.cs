@@ -48,6 +48,14 @@ namespace SimpleNetwork
             {
                 try
                 {
+                    string json = MessagePackSerializer.ConvertToJson(bytes);
+                    if (!typeof(T).IsPrimitive)
+                    {
+                        foreach (FieldInfo f in typeof(T).GetFields())
+                        {
+                            if (!f.IsInitOnly && !json.Contains(f.Name)) return false;
+                        }
+                    }
                     MessagePackSerializer.Deserialize<T>(bytes, ContractlessStandardResolver.Options);
                     return true;
                 }

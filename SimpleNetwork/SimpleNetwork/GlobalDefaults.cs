@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace SimpleNetwork
+﻿namespace SimpleNetwork
 {
     public static class GlobalDefaults
     {

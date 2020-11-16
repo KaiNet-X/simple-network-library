@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
 
 namespace SimpleNetwork
@@ -17,16 +13,13 @@ namespace SimpleNetwork
         private Thread BackgroundWorker;
         private Socket ServerSocket;
         private List<Client> Clients = new List<Client>();
-        //private List<bool> MarkedForRemove = new List<bool>();
 
-        public int UpdateWaitTime = 10000;
         public int UpdateClientWaitTime = 1000;
         public readonly ushort MaxClients;
 
-        public byte ClientCount => (byte)Clients.Count;
+        public ushort ClientCount => (ushort)Clients.Count;
         public bool Running { get; private set; } = false;
         public bool RestartAutomatically = false;
-        private bool ModifyingClientList = false;
 
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
         public event ClientDisconnected OnClientDisconnect;
@@ -35,6 +28,8 @@ namespace SimpleNetwork
         public event ClientConnected OnClientConnect;
 
         public ClientAccessor ReadonlyClients;
+
+        private object LockObject = new object();
 
         public Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
         {
@@ -45,6 +40,17 @@ namespace SimpleNetwork
 
             ReadonlyClients = new ClientAccessor(Clients);
         }
+
+        public Server(string iPAddress, int PortNum, ushort MaxClients)
+        {
+            Address = IPAddress.Parse(iPAddress);
+            Port = PortNum;
+            this.MaxClients = MaxClients;
+            ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+
+            ReadonlyClients = new ClientAccessor(Clients);
+        }
+
 
         /// <summary>
         /// Enables the server to connect clients
@@ -174,16 +180,17 @@ namespace SimpleNetwork
         /// </summary>
         public void ClearDisconnectedClients()
         {
-            WaitToModify();
-            for (int i = 0; i < ClientCount; i++)
+            lock (LockObject)
             {
-                if (!Clients[i].IsConnected)
+                for (int i = 0; i < ClientCount; i++)
                 {
-                    Clients.RemoveAt(i);
-                    i--;
+                    if (!Clients[i].IsConnected)
+                    {
+                        Clients.RemoveAt(i);
+                        i--;
+                    }
                 }
             }
-            ModifyingClientList = false;
         }
 
         /// <summary>
@@ -196,9 +203,10 @@ namespace SimpleNetwork
             Clients[index].Disconnect();
             if (remove)
             {
-                WaitToModify();
-                Clients.RemoveAt(index);
-                ModifyingClientList = false;
+                lock (LockObject)
+                {
+                    Clients.RemoveAt(index);
+                }
             }
         }
 
@@ -213,9 +221,10 @@ namespace SimpleNetwork
             Clients[index].Disconnect(ctx);
             if (remove)
             {
-                WaitToModify();
-                Clients.RemoveAt(index);
-                ModifyingClientList = false;
+                lock (LockObject)
+                {
+                    Clients.RemoveAt(index);
+                }
             }
         }
 
@@ -225,35 +234,34 @@ namespace SimpleNetwork
         /// <param name="remove">specifies whether to remove the clients</param>
         public void DisconnectAllClients(bool remove = false)
         {
-            WaitToModify();
-            for (int i = 0; i < ClientCount; i++)
-            {
-                if (remove)
+            lock (LockObject)
+                for (int i = 0; i < ClientCount; i++)
                 {
-                    try
+                    if (remove)
                     {
-                        Clients[i].Disconnect(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.REMOVE });
-                    }
-                    catch
-                    {
+                        try
+                        {
+                            Clients[i].Disconnect(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.REMOVE });
+                        }
+                        catch
+                        {
 
+                        }
+                        Clients.RemoveAt(i);
+                        i--;
                     }
-                    Clients.RemoveAt(i);
-                    i--;
-                }
-                else
-                {
-                    try
+                    else
                     {
-                        Clients[i].Disconnect();
-                    }
-                    catch
-                    {
+                        try
+                        {
+                            Clients[i].Disconnect();
+                        }
+                        catch
+                        {
 
+                        }
                     }
                 }
-                ModifyingClientList = false;
-            }
         }
 
         private void ManagementLoop()
@@ -261,37 +269,29 @@ namespace SimpleNetwork
 
         }
 
-        private void WaitToModify()
-        {
-            while (ModifyingClientList)
-            {
-
-            }
-            ModifyingClientList = true;
-        }
-
         private void ClientDisconnect(DisconnectionContext ctx, ConnectionInfo inf)
         {
-            WaitToModify();
-            for (int i = 0; i < ClientCount; i++)
+            lock(LockObject)
             {
-                if (Clients[i].IsConnected) continue;
-                if (Clients[i].DisconnectionMode.type == DisconnectionContext.DisconnectionType.REMOVE)
+                for (int i = 0; i < ClientCount; i++)
                 {
-                    Clients.RemoveAt(i);
-                    i--;
+                    if (Clients[i].IsConnected) continue;
+                    if (Clients[i].DisconnectionMode.type == DisconnectionContext.DisconnectionType.REMOVE)
+                    {
+                        Clients.RemoveAt(i);
+                        i--;
+                    }
+                    else if ((int)Clients[i].DisconnectionMode.type == 2 && (int)GlobalDefaults.ForcibleDisconnectMode == 0)
+                    {
+                        Clients.RemoveAt(i);
+                        i--;
+                    }
                 }
-                else if ((int)Clients[i].DisconnectionMode.type == 2 && (int)GlobalDefaults.ForcibleDisconnectMode == 0)
-                {
-                    Clients.RemoveAt(i);
-                    i--;
-                }
+
+                if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+
+                OnClientDisconnect?.Invoke(ctx, inf);
             }
-            ModifyingClientList = false;
-
-            if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
-
-            OnClientDisconnect?.Invoke(ctx, inf);
         }
 
         public class ClientAccessor
@@ -308,8 +308,8 @@ namespace SimpleNetwork
                 {
                     ConnectionInfo inf = Clients[index].connectionInfo;
                     bool con = Clients[index].IsConnected;
-
-                    return new ClientModel(inf, con);
+                    int count = Clients[index].QueuedObjectCount;
+                    return new ClientModel(inf, con, count);
                 }
             }
 
@@ -317,11 +317,13 @@ namespace SimpleNetwork
             {
                 public readonly ConnectionInfo Info;
                 public readonly bool IsConnected;
+                public readonly int QueuedObjectCount;
 
-                internal ClientModel(ConnectionInfo info, bool connected)
+                internal ClientModel(ConnectionInfo info, bool connected, int queuedObjectCount)
                 {
                     Info = info;
                     IsConnected = connected;
+                    QueuedObjectCount = queuedObjectCount;
                 }
             }
         }

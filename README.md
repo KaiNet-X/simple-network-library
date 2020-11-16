@@ -1,5 +1,5 @@
 # simple-network-library
-Simple net is a .NET standard library that greatly simplifies the process of networking. 
+SimpleNetwork is a .NET standard library that greatly simplifies the process of networking. 
 
 Simple net allows you to start and initialize a flexible tcp server in as little as two lines. 
 It contains two main classes, client and server, each that are easy to get connected and sending information between them.
@@ -21,3 +21,118 @@ The server class has a client cap that can be set in the constructor.
 When clients connect to it, they are added to a private list of clients. The user can send objects to them using the SendToAll method, or the SendToClient method that requires an index. 
 To recieve information, there is a method called PullFromClient that takes an index parameter.
 There is an OnConnect as well as an OnDisconnect event that is called whenever a client connects or disconnects.
+
+## Getting started
+So, how do you actually send data?
+No kidding, its as simple as
+~~~
+Server S = new Server(IPAddress.Loopback, 5454, 1);
+S.StartServer()
+
+Client c = new Client();
+c.Connect(IPAddress.Loopback, 5454);
+
+s.SendToAll([Any object]);
+
+[Any object] obj = c.WaitForPullObject<T>();
+~~~
+[Any object] is anyt object type of your chosing. Yes, you no longer have to create some confusing format for sending over sockets and implement it on every single object, you can simply send it and it works.
+
+Now, if you want to send from the client, simply replace
+~~~
+s.SendToAll(obj);
+
+[Any object] obj = c.WaitForPullObject<[Any object]>();
+~~~
+with
+~~~
+c1.SendObject(Test1);
+
+[Any object] o1 = S.WaitForPullFromClient<[Any object]>(0);
+~~~
+## Sending between applications
+Create your server application
+~~~
+using System;
+using System.Net;
+using SimpleNetwork;
+
+namespace ServerAppilcation
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Server S = new Server(IPAddress.Loopback, 5454, 1);
+            S.StartServer();
+
+            Console.WriteLine(S.WaitForPullFromClient<string>(1));
+
+            S.SendToAll("Goodbye");
+
+            S.Close();
+        }
+    }
+}
+~~~
+And your client application
+~~~
+using System;
+using SimpleNetwork;
+using System.Net;
+
+namespace ClientApplication
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Client C = new Client();
+            C.Connect(IPAddress.Parse("192.168.0.17"), 5454);
+
+            C.SendObject(Console.ReadLine());
+
+            Console.WriteLine(C.WaitForPullObject<string>());
+
+            C.Clear();
+        }
+    }
+}
+~~~
+Now that you have a basic understanding on how this library works, on to the documentation!
+
+# Docs
+
+##### Classes
+
+* Server
+-- Manages multiple client connections. Has methods for sending to clients, recieving from clients, and events that allow you to track new connections and disconnections.
+* Client
+-- Connects to a server, sends and recieves data with server.
+* ConnectionInfo
+-- Information about a given connection such as IP Address and port number.
+* DisconnectionContext
+-- Class sent over sockets when disconnect is called. Manages what the remote device does when disconnected from.
+* GlobalDefaults
+-- Static class that manages the default settings used by SimpleNetwork, such as wheather to use JSON or MESSAGEPACK or how an ungraceful disconnect is handled.
+
+##### Server properties
+
+* int UpdateClientWaitTime 
+-- Get or set the time in milliseconds the client waits in between recieve calls.
+* ushort MaxClients
+-- Gets the maximum amount of clients the server can manage at a time.
+* ushort ClientCount
+-- Gets the amount of clients that the server is currently managing. This includes clients that have disconnected, but are set to stay.
+* bool Running
+--Gets the boolean value of the server running.
+* public bool RestartAutomatically
+-- Gets or sets the boolean value for the server to automatically start accepting clients after one has been disconnected and removed.
+* ReadonlyClients
+-- ClientAccessor object that returns ClientModel object based on client index.
+
+##### Server events
+* OnClientDisconnect
+-- Invoked whenever a client disconnects, passes a DisconnectionContext object as well as a ConnectionInfo object to it's subscribers.
+* OnClientConnect
+-- Invoked whenever a client connects, passes a ConnectionInfo object to it's subscribers.

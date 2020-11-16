@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 
 namespace SimpleNetwork
@@ -15,6 +13,7 @@ namespace SimpleNetwork
         private List<byte[]> ObjectQueue = new List<byte[]>();
 
         public int UpdateWaitTime = 1000;
+        public int QueuedObjectCount => ObjectQueue.Count;
 
         public ConnectionInfo connectionInfo { get; private set; }
 
@@ -67,7 +66,6 @@ namespace SimpleNetwork
         /// </summary>
         /// <param name="address">Ip address of the server</param>
         /// <param name="port">port number of the server</param>
-
         public void Connect(IPAddress address, int port)
         {
             while (!IsConnected)
@@ -77,6 +75,39 @@ namespace SimpleNetwork
                     if(!IsConnected)
                     {
                         Connection.Connect(new IPEndPoint(address, port));
+                        IsConnected = true;
+                        Running = true;
+
+                        IPEndPoint loc = Connection.LocalEndPoint as IPEndPoint;
+                        IPEndPoint rem = Connection.RemoteEndPoint as IPEndPoint;
+
+                        connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
+                    }
+                }
+                catch (SocketException) { }
+            }
+
+            BackgroundWorker = new Thread(() =>
+            {
+                ManagementLoop();
+            });
+            BackgroundWorker.Start();
+        }
+
+        /// <summary>
+        /// Connects to server with specified address and port
+        /// </summary>
+        /// <param name="address">Ip address of the server. If invalid address is entered, an exception is thrown.</param>
+        /// <param name="port">port number of the server</param>
+        public void Connect(string address, int port)
+        {
+            while (!IsConnected)
+            {
+                try
+                {
+                    if (!IsConnected)
+                    {
+                        Connection.Connect(new IPEndPoint(IPAddress.Parse(address), port));
                         IsConnected = true;
                         Running = true;
 
@@ -146,6 +177,58 @@ namespace SimpleNetwork
             });
             BackgroundWorker.Start();
         }
+
+        /// <summary>
+        /// Connects to server with specified address and port. 
+        /// Allows code to continue when connecting.
+        /// </summary>
+        /// <param name="address">Ip address of the server. If invalid address is entered, an exception is thrown.</param>
+        /// <param name="port">port number of the server</param>
+        public void BeginConnect(string address, int port)
+        {
+            BackgroundWorker = new Thread(() =>
+            {
+                TryingConnect = true;
+                while (!IsConnected && TryingConnect)
+                {
+                    try
+                    {
+                        if (!IsConnected)
+                        {
+                            Connection.Connect(new IPEndPoint(IPAddress.Parse(address), port));
+
+                            IsConnected = true;
+                            Running = true;
+
+                            IPEndPoint loc = Connection.LocalEndPoint as IPEndPoint;
+                            IPEndPoint rem = Connection.RemoteEndPoint as IPEndPoint;
+
+                            connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
+
+                            try
+                            {
+                                OnConnect?.Invoke(connectionInfo);
+                            }
+                            catch
+                            {
+
+                            }
+                        }
+                    }
+                    catch (SocketException)
+                    {
+                        //IsConnected = false;
+                    }
+                    Thread.Sleep(UpdateWaitTime);
+                }
+                if (!TryingConnect) return;
+                TryingConnect = false;
+
+                ManagementLoop();
+            });
+            BackgroundWorker.Start();
+        }
+
 
         /// <summary>
         /// Cancels BeginConnect.
@@ -299,55 +382,13 @@ namespace SimpleNetwork
             }    
         }
 
-        private void Recieve2()
-        {
-            try
-            {
-                if (IsConnected && Connection.Available > 0)
-                {
-                    byte[] bytes = GetAllBytes();
-
-                    if (bytes != null)
-                    {
-                        string json = ObjectParser.BytesToJson(bytes);
-
-                        List<string> Sections = json.Split(new string[] { "\";\"" }, StringSplitOptions.None).Where(x => x != "" && x.Trim('"').Length > 0).ToList();
-
-                        for (int i = 0; i < Sections.Count; i++)
-                        {
-                            string j = Sections[i];
-                            byte[] b = ObjectParser.JsonToBytes(j);
-
-                            if (ObjectParser.IsType<DisconnectionContext>(b))
-                            {
-                                DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(b);
-                                DisconnectedFrom(ctx);
-
-                                return;
-                            }
-                            else
-                            {
-                                lock (LockObject)
-                                    ObjectQueue.Add(b);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                Running = false;
-                DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
-            }
-            catch (ObjectDisposedException) { }
-        }
         private void Recieve()
         {
             try
             {
                 if (IsConnected && Connection.Available > 0)
                 {
-                    List<byte[]> objects = GetAllBytes3();
+                    List<byte[]> objects = GetAllBytes();
 
                     if (objects.Count > 0)
                     {
@@ -381,61 +422,7 @@ namespace SimpleNetwork
             catch (ObjectDisposedException) { }
         }
 
-        private byte[] GetAllBytes2()
-        {
-            List<byte> FullObject = new List<byte>();
-
-            bool CompleteObject = false;
-
-            while (!CompleteObject && Running)
-            {
-                while (Connection.Available == 0) ;
-                byte[] bytes = new byte[Connection.Available];
-
-                int RecievedBytes = Connection.Receive(bytes);
-
-                try
-                {
-                    string json = ObjectParser.BytesToJson(bytes);
-                    if (json.Trim('"') != "")
-                    {
-                        if (RecievedBytes < 65536) CompleteObject = true;
-                        FullObject.AddRange(bytes);
-                    }
-                    else if (FullObject.Count == 0)
-                    {
-                        CompleteObject = true;
-                    }
-                }
-                catch(Exception ex)
-                {
-                    FullObject.AddRange(bytes);
-                }
-            }
-
-            return FullObject.ToArray();
-        }
-        private byte[] GetAllBytes()
-        {
-            List<byte> FullObject = new List<byte>();
-
-            bool CompleteObject = false;
-
-            while (!CompleteObject && Running)
-            {
-                while (Connection.Available == 0) ;
-                byte[] Buffer = new byte[Connection.Available];
-
-                Connection.Receive(Buffer);
-
-                PacketHeader h = PacketHeader.GetHeader(Buffer);
-                FullObject.AddRange(PacketHeader.RemoveHeader(Buffer));
-                if (h.FinalPacket)
-                    CompleteObject = true;
-            }
-            return FullObject.ToArray();
-        }
-        private List<byte[]> GetAllBytes3()
+        private List<byte[]> GetAllBytes()
         {
             List<byte[]> Objects = new List<byte[]>();
             List<byte> FullObject = new List<byte>();

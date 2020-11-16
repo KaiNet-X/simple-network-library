@@ -76,37 +76,6 @@ namespace NetworkingTest
             }
         }
 
-        [Fact]
-        public void ServerDisconnectsClient()
-        {
-            SetGlobalDefaults();
-
-            Stopwatch S = new Stopwatch();
-            S.Start();
-
-            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
-            s.StartServer();
-
-            Client c = new Client();
-            c.Connect(IPAddress.Loopback, PortGet(0));
-            c.OnDisconnect += C_OnDisconnect;
-            c.UpdateWaitTime = 0;
-
-            s.DisconnectAllClients();
-
-            while (!ServerDisconnectedClient) if (S.ElapsedMilliseconds >= SleepTime) break;
-
-            try
-            {
-                Assert.True(ServerDisconnectedClient);
-            }
-            finally
-            {
-                s.Close();
-                Wait();
-            }
-        }
-
         [Theory]
         [InlineData(4)]
         void ServerDisconnectsMultipleClients(byte clients)
@@ -300,6 +269,55 @@ namespace NetworkingTest
             try
             {
                 Assert.True(clientsDown == 1 && s.ClientCount == 2);
+            }
+            finally
+            {
+                s.Close();
+                Wait();
+            }
+        }
+
+        [Fact]
+        void ClientRecievesMultipleObjectTypes()
+        {
+            SetGlobalDefaults();
+
+            Stopwatch S = new Stopwatch();
+            S.Start();
+
+            Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
+            s.StartServer();
+
+            Client c = new Client();
+            c.Connect(IPAddress.Loopback, PortGet(0));
+
+            Exception ex = new Exception(" S DAFADFASD");
+            decimal d = 64.463452m;
+            string str = "SFAEF";
+
+            s.SendToAll(ex);
+            s.SendToAll(d);
+            s.SendToAll(str);
+
+            Exception ex1 = null;
+            decimal d1 = default;
+            string str1 = null;
+
+            new Thread(() =>
+            {
+                ex1 = c.WaitForPullObject<Exception>();
+                d1 = c.WaitForPullObject<decimal>();
+                str1 = c.WaitForPullObject<string>();
+            }).Start();
+
+            while (ex1 == null || d1 == default || str1 == null) if (S.ElapsedMilliseconds >= SleepTime) break;
+
+            bool b1 = ex.Message == ex1.Message && ex.HResult == ex1.HResult;
+            bool b2 = d.Equals(d1);
+            bool b3 = str.Equals(str1);
+            try
+            {
+                Assert.True(b1 && b2 && b3);
             }
             finally
             {
