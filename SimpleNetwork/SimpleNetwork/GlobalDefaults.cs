@@ -4,6 +4,7 @@
     {
         public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.REMOVE;
         public static EncodingType ObjectEncodingType = EncodingType.MESSAGE_PACK;
+        public static bool RunServerClientsOnOneThread = false;
 
         public enum ForcibleDisconnectBehavior
         {

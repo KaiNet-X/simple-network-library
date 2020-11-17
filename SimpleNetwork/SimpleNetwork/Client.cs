@@ -48,12 +48,14 @@ namespace SimpleNetwork
 
             connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
             Running = true;
-
-            BackgroundWorker = new Thread(() =>
+            if (!GlobalDefaults.RunServerClientsOnOneThread)
             {
-                ManagementLoop();
-            });
-            BackgroundWorker.Start();
+                BackgroundWorker = new Thread(() =>
+                {
+                    ManagementLoop();
+                });
+                BackgroundWorker.Start();
+            }
         }
 
         public Client()
@@ -343,7 +345,7 @@ namespace SimpleNetwork
         /// <returns>object(T)</returns>
         public T WaitForPullObject<T>()
         {
-            while (Running)
+            do
             {
                 lock (LockObject)
                     for (int i = 0; i < ObjectQueue.Count; i++)
@@ -359,6 +361,8 @@ namespace SimpleNetwork
                     }
                 Thread.Sleep(UpdateWaitTime);
             }
+            while (Running);
+
             return PullObject<T>();
         }
 
@@ -467,6 +471,12 @@ namespace SimpleNetwork
                 Recieve();
                 Thread.Sleep(UpdateWaitTime);
             }
+        }
+
+        internal void Manage()
+        {
+            if (IsConnected)
+                Recieve();
         }
 
         private void DisconnectedFrom(DisconnectionContext ctx)

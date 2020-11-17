@@ -73,7 +73,10 @@ namespace SimpleNetwork
                     {
                         Socket s = ServerSocket.Accept();
                         Client c = new Client(s);
-                        Clients.Add(c);
+
+                        lock(LockObject)
+                            Clients.Add(c);
+
                         OnClientConnect?.Invoke(c.connectionInfo);
                         c.OnDisconnect += ClientDisconnect;
                         c.UpdateWaitTime = UpdateClientWaitTime;
@@ -90,12 +93,16 @@ namespace SimpleNetwork
             });
             clientAcceptor.Start();
 
-            BackgroundWorker = new Thread(() =>
+            Running = true;
+
+            if (GlobalDefaults.RunServerClientsOnOneThread)
             {
-                Running = true;
-                ManagementLoop();
-            });
-            BackgroundWorker.Start();
+                BackgroundWorker = new Thread(() =>
+                {
+                    ManagementLoop();
+                });
+                BackgroundWorker.Start();
+            }
         }
 
         /// <summary>
@@ -126,6 +133,7 @@ namespace SimpleNetwork
         public void Close()
         {
             Running = false;
+            RestartAutomatically = false;
             ServerSocket?.Close();
             DisconnectAllClients(true);
         }
@@ -190,6 +198,7 @@ namespace SimpleNetwork
                         i--;
                     }
                 }
+                if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
             }
         }
 
@@ -206,6 +215,7 @@ namespace SimpleNetwork
                 lock (LockObject)
                 {
                     Clients.RemoveAt(index);
+                    if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
                 }
             }
         }
@@ -224,6 +234,7 @@ namespace SimpleNetwork
                 lock (LockObject)
                 {
                     Clients.RemoveAt(index);
+                    if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
                 }
             }
         }
@@ -235,6 +246,7 @@ namespace SimpleNetwork
         public void DisconnectAllClients(bool remove = false)
         {
             lock (LockObject)
+            {
                 for (int i = 0; i < ClientCount; i++)
                 {
                     if (remove)
@@ -262,11 +274,56 @@ namespace SimpleNetwork
                         }
                     }
                 }
+                if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+            }
+        }
+
+        public void DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
+        {
+            lock (LockObject)
+            {
+                for (int i = 0; i < ClientCount; i++)
+                {
+                    if (remove)
+                    {
+                        try
+                        {
+                            Clients[i].Disconnect(ctx);
+                        }
+                        catch
+                        {
+
+                        }
+                        Clients.RemoveAt(i);
+                        i--;
+                    }
+                    else
+                    {
+                        try
+                        {
+                            Clients[i].Disconnect();
+                        }
+                        catch
+                        {
+
+                        }
+                    }
+                }
+                if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+            }
         }
 
         private void ManagementLoop()
         {
-
+            while (true)
+            {
+                lock (LockObject)
+                    for (int i = 0; i < ClientCount; i++)
+                    {
+                        Clients[i].Manage();
+                    }
+                Thread.Sleep(UpdateClientWaitTime);
+            }
         }
 
         private void ClientDisconnect(DisconnectionContext ctx, ConnectionInfo inf)
@@ -281,7 +338,7 @@ namespace SimpleNetwork
                         Clients.RemoveAt(i);
                         i--;
                     }
-                    else if ((int)Clients[i].DisconnectionMode.type == 2 && (int)GlobalDefaults.ForcibleDisconnectMode == 0)
+                    else if ((int)Clients[i].DisconnectionMode.type == 2 && GlobalDefaults.ForcibleDisconnectMode == 0)
                     {
                         Clients.RemoveAt(i);
                         i--;

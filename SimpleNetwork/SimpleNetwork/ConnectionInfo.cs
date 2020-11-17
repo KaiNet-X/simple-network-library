@@ -17,6 +17,5 @@ namespace SimpleNetwork
             RemoteAddress = remA;
             RemoteHostName = remS;
         }
-
     }
 }
