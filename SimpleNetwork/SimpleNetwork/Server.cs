@@ -31,6 +31,8 @@ namespace SimpleNetwork
 
         private object LockObject = new object();
 
+        private bool ConnectingClient = false;
+
         public Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
         {
             Address = iPAddress;
@@ -74,12 +76,22 @@ namespace SimpleNetwork
                         Socket s = ServerSocket.Accept();
                         Client c = new Client(s);
 
-                        lock(LockObject)
-                            Clients.Add(c);
+                        ConnectingClient = true;
 
-                        OnClientConnect?.Invoke(c.connectionInfo);
-                        c.OnDisconnect += ClientDisconnect;
-                        c.UpdateWaitTime = UpdateClientWaitTime;
+                        lock(LockObject)
+                        {
+                            if (Running)
+                            {
+                                Clients.Add(c);
+                                OnClientConnect?.Invoke(c.connectionInfo);
+                                c.OnDisconnect += ClientDisconnect;
+                                c.UpdateWaitTime = UpdateClientWaitTime;
+                            }                                
+                            else
+                                c.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
+                        }
+
+                        ConnectingClient = false;
                     }
                     catch (SocketException)
                     {
@@ -115,19 +127,6 @@ namespace SimpleNetwork
         }
 
         /// <summary>
-        /// Sends Object t to all clients
-        /// </summary>
-        /// <typeparam name="T">Object type</typeparam>
-        /// <param name="obj">Object to send</param>
-        public void SendToAll<T>(T obj)
-        {
-            for (int i = 0; i < ClientCount; i++)
-            {
-                Clients[i].SendObject(obj);
-            }
-        }
-
-        /// <summary>
         /// Closes the server, disconnects and clears all clients
         /// </summary>
         public void Close()
@@ -136,6 +135,23 @@ namespace SimpleNetwork
             RestartAutomatically = false;
             ServerSocket?.Close();
             DisconnectAllClients(true);
+        }
+
+        /// <summary>
+        /// Sends Object t to all clients
+        /// </summary>
+        /// <typeparam name="T">Object type</typeparam>
+        /// <param name="obj">Object to send</param>
+        public void SendToAll<T>(T obj)
+        {
+            lock (LockObject)
+            {
+                WaitForPendingConnections();
+                for (int i = 0; i < ClientCount; i++)
+                {
+                    Clients[i].SendObject(obj);
+                }
+            }
         }
 
         /// <summary>
@@ -245,37 +261,7 @@ namespace SimpleNetwork
         /// <param name="remove">specifies whether to remove the clients</param>
         public void DisconnectAllClients(bool remove = false)
         {
-            lock (LockObject)
-            {
-                for (int i = 0; i < ClientCount; i++)
-                {
-                    if (remove)
-                    {
-                        try
-                        {
-                            Clients[i].Disconnect(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.REMOVE });
-                        }
-                        catch
-                        {
-
-                        }
-                        Clients.RemoveAt(i);
-                        i--;
-                    }
-                    else
-                    {
-                        try
-                        {
-                            Clients[i].Disconnect();
-                        }
-                        catch
-                        {
-
-                        }
-                    }
-                }
-                if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
-            }
+            DisconnectAllClients(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.CLOSE_CONNECTION }, remove);
         }
 
         public void DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
@@ -284,33 +270,20 @@ namespace SimpleNetwork
             {
                 for (int i = 0; i < ClientCount; i++)
                 {
+                    Clients[i].Disconnect(ctx);
                     if (remove)
                     {
-                        try
-                        {
-                            Clients[i].Disconnect(ctx);
-                        }
-                        catch
-                        {
-
-                        }
                         Clients.RemoveAt(i);
                         i--;
                     }
-                    else
-                    {
-                        try
-                        {
-                            Clients[i].Disconnect();
-                        }
-                        catch
-                        {
-
-                        }
-                    }
                 }
-                if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
             }
+            if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+        }
+
+        private void WaitForPendingConnections()
+        {
+            while (ConnectingClient) ;
         }
 
         private void ManagementLoop()

@@ -4,6 +4,7 @@ using SimpleNetwork;
 using System.Net;
 using System.Threading;
 using System.Diagnostics;
+using Xunit.Repeat;
 
 namespace NetworkingTest
 {
@@ -15,9 +16,10 @@ namespace NetworkingTest
         int clientsDown = 0;
         int OnConnectCalled = 0;
 
-        int SleepTime = 4000;
+        int SleepTime = 2000;
 
         GlobalDefaults.EncodingType enc = GlobalDefaults.EncodingType.MESSAGE_PACK;
+        bool OneThread = false;
 
         [Fact]
         public void ClientConnectsToServer()
@@ -56,7 +58,6 @@ namespace NetworkingTest
             Server s = new Server(IPAddress.Loopback, PortGet(0), 1);
             s.StartServer();
             s.OnClientDisconnect += S_OnClientDisconnect;
-            s.UpdateWaitTime = 0;
 
             Client c = new Client();
             c.Connect(IPAddress.Loopback, PortGet(0));
@@ -77,7 +78,8 @@ namespace NetworkingTest
         }
 
         [Theory]
-        [InlineData(4)]
+        [InlineData(9)]
+        //[Repeat(15)]
         void ServerDisconnectsMultipleClients(byte clients)
         {
             SetGlobalDefaults();
@@ -96,7 +98,10 @@ namespace NetworkingTest
                 Clients[i].OnDisconnect += TestClass_OnDisconnect;
                 Clients[i].UpdateWaitTime = 0;
             }
-            s.DisconnectAllClients();
+
+            while (s.ClientCount < clients) { }
+
+            s.DisconnectAllClients(true);
             while (clientsDown < clients) if (S.ElapsedMilliseconds >= SleepTime) break;
 
             try
@@ -278,6 +283,7 @@ namespace NetworkingTest
         }
 
         [Fact]
+        //[Repeat(10)]
         void ClientRecievesMultipleObjectTypes()
         {
             SetGlobalDefaults();
@@ -290,6 +296,8 @@ namespace NetworkingTest
 
             Client c = new Client();
             c.Connect(IPAddress.Loopback, PortGet(0));
+
+            while (s.ClientCount == 0) ;
 
             Exception ex = new Exception(" S DAFADFASD");
             decimal d = 64.463452m;
@@ -312,9 +320,9 @@ namespace NetworkingTest
 
             while (ex1 == null || d1 == default || str1 == null) if (S.ElapsedMilliseconds >= SleepTime) break;
 
-            bool b1 = ex.Message == ex1.Message && ex.HResult == ex1.HResult;
+            bool b1 = ex1 != null && ex.Message == ex1.Message && ex.HResult == ex1.HResult;
             bool b2 = d.Equals(d1);
-            bool b3 = str.Equals(str1);
+            bool b3 = str1 != null && str.Equals(str1);
             try
             {
                 Assert.True(b1 && b2 && b3);
@@ -352,6 +360,7 @@ namespace NetworkingTest
         private void SetGlobalDefaults()
         {
             GlobalDefaults.ObjectEncodingType = enc;
+            GlobalDefaults.RunServerClientsOnOneThread = OneThread;
         }
         private void Wait()
         {

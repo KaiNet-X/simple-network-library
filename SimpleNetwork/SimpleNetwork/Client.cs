@@ -266,12 +266,12 @@ namespace SimpleNetwork
             DisconnectionMode = ctx;
             IsConnected = false;
 
-            lock (LockObject)
-                if (ctx.type == DisconnectionContext.DisconnectionType.REMOVE)
-                {
-                    Running = false;
+            Running = false;
+            if (ctx.type == DisconnectionContext.DisconnectionType.REMOVE)
+            {
+                lock (LockObject)
                     ObjectQueue.Clear();
-                }
+            }
         }
 
         /// <summary>

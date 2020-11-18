@@ -15,7 +15,7 @@ namespace FormsTest
         {
             InitializeComponent();
             GlobalDefaults.ObjectEncodingType = GlobalDefaults.EncodingType.MESSAGE_PACK;
-            s = new Server(IPAddress.Parse("192.168.0.17"), 9573, 5);
+            s = new Server(IPAddress.Parse("192.168.0.17"), 9573, 1);
             s.RestartAutomatically = true;
             s.StartServer();
             s.OnClientConnect += S_OnClientConnect;
@@ -32,6 +32,7 @@ namespace FormsTest
 
         private void button1_Click(object sender, EventArgs e)
         {
+            s.ClearDisconnectedClients();
             OpenFileDialog ofd = new OpenFileDialog();
             ofd.ShowDialog();
             Bitmap bmp = (Bitmap)Image.FromFile(ofd.FileName);
