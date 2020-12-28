@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
     <Description>Library for easy, flexible networking. Large amount of control but works straight out of the box</Description>
     <Authors>Kai</Authors>
     <Company>KaiNet</Company>
@@ -9,16 +9,16 @@
     <RepositoryUrl>https://github.com/KaiNet-X/simple-network-library</RepositoryUrl>
     <PackageTags>socket, sockets, network, networking, tcp, network</PackageTags>
     <PackageId>KaiNet.SimpleNetwork</PackageId>
-    <Version>1.0.3</Version>
+    <Version>1.1.0</Version>
+    <FileUpgradeFlags>40</FileUpgradeFlags>
+    <UpgradeBackupLocation>C:\Users\Kai\source\repos\SimpleNetwork\Backup\SimpleNetwork\</UpgradeBackupLocation>
+    <OldToolsVersion>2.0</OldToolsVersion>
   </PropertyGroup>
-
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <Optimize>false</Optimize>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="MessagePack" Version="2.2.60" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
   </ItemGroup>
-
 </Project>

@@ -10,11 +10,10 @@ namespace SimpleNetwork
     {
         private Thread BackgroundWorker;
         private Socket Connection;
-        private List<byte[]> ObjectQueue = new List<byte[]>();
+        private List<object> ObjectQueue = new List<object>();
 
         public int UpdateWaitTime = 1000;
         public int QueuedObjectCount => ObjectQueue.Count;
-
         public ConnectionInfo connectionInfo { get; private set; }
 
         public bool Running = true;
@@ -103,7 +102,7 @@ namespace SimpleNetwork
         /// <param name="port">port number of the server</param>
         public void Connect(string address, int port)
         {
-            while (!IsConnected)
+            while (!Connection.Connected)
             {
                 try
                 {
@@ -299,6 +298,11 @@ namespace SimpleNetwork
             }
         }
 
+        public void ClearQueue()
+        {
+            lock (LockObject)
+                ObjectQueue.Clear();
+        }
         /// <summary>
         /// Sends object of type T to the server.
         /// </summary>
@@ -309,7 +313,7 @@ namespace SimpleNetwork
             lock(LockObject)
                 if (IsConnected)
                 {
-                    Connection.Send(PacketHeader.AddHeadders(ObjectParser.ObjectToBytes(obj)));
+                    Connection.Send(PacketHeader.AddHeadders(ObjectParser.ObjectToBytes(obj), typeof(T)));
                 }
         }
 
@@ -325,13 +329,13 @@ namespace SimpleNetwork
             {
                 for (int i = 0; i < ObjectQueue.Count; i++)
                 {
-                    if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                    if (ObjectQueue[i].GetType().Equals(typeof(T)))
                     {
-                        byte[] bytes = ObjectQueue[i];
+                        object o = ObjectQueue[i];
 
                         ObjectQueue.RemoveAt(i);
 
-                        return ObjectParser.BytesToObject<T>(bytes);
+                        return (T)o;
                     }
                 }
                 return default;
@@ -350,13 +354,13 @@ namespace SimpleNetwork
                 lock (LockObject)
                     for (int i = 0; i < ObjectQueue.Count; i++)
                     {
-                        if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                        if (ObjectQueue[i].GetType().Equals(typeof(T)))
                         {
-                            byte[] bytes = ObjectQueue[i];
+                            object o = ObjectQueue[i];
 
                             ObjectQueue.RemoveAt(i);
 
-                            return ObjectParser.BytesToObject<T>(bytes);
+                            return (T)o;
                         }
                     }
                 Thread.Sleep(UpdateWaitTime);
@@ -377,7 +381,7 @@ namespace SimpleNetwork
             {
                 for (int i = 0; i < ObjectQueue.Count; i++)
                 {
-                    if (ObjectParser.IsType<T>(ObjectQueue[i]))
+                    if (ObjectQueue[i].GetType().Equals(typeof(T)))
                     {
                         return true;
                     }
@@ -386,48 +390,49 @@ namespace SimpleNetwork
             }    
         }
 
+        //private void Recieve2()
+        //{
+        //    try
+        //    {
+        //        if (IsConnected && Connection.Available > 0)
+        //        {
+        //            List<byte[]> objects = GetAllBytes();
+
+        //            if (objects.Count > 0)
+        //            {
+
+        //                for (int i = 0; i < objects.Count; i++)
+        //                {
+        //                    string j = ObjectParser.BytesToJson(objects[i]);
+        //                    byte[] b = objects[i];
+
+        //                    if (ObjectParser.IsType<DisconnectionContext>(b))
+        //                    {
+        //                        DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(b);
+        //                        DisconnectedFrom(ctx);
+
+        //                        return;
+        //                    }
+        //                    else
+        //                    {
+        //                        lock (LockObject)
+        //                            ObjectQueue.Add(b);
+        //                    }
+        //                }
+        //            }
+        //        }
+        //    }
+        //    catch (SocketException)
+        //    {
+        //        Running = false;
+        //        DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
+        //    }
+        //    catch (ObjectDisposedException) { }
+        //}
+
         private void Recieve()
         {
-            try
-            {
-                if (IsConnected && Connection.Available > 0)
-                {
-                    List<byte[]> objects = GetAllBytes();
-
-                    if (objects.Count > 0)
-                    {
-
-                        for (int i = 0; i < objects.Count; i++)
-                        {
-                            string j = ObjectParser.BytesToJson(objects[i]);
-                            byte[] b = objects[i];
-
-                            if (ObjectParser.IsType<DisconnectionContext>(b))
-                            {
-                                DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(b);
-                                DisconnectedFrom(ctx);
-
-                                return;
-                            }
-                            else
-                            {
-                                lock (LockObject)
-                                    ObjectQueue.Add(b);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (SocketException)
-            {
-                Running = false;
-                DisconnectedFrom(new DisconnectionContext() { type = DisconnectionContext.DisconnectionType.FORCIBLE });
-            }
-            catch (ObjectDisposedException) { }
-        }
-
-        private List<byte[]> GetAllBytes()
-        {
+            List<PacketHeader> Headers = new List<PacketHeader>();
             List<byte[]> Objects = new List<byte[]>();
             List<byte> FullObject = new List<byte>();
 
@@ -451,18 +456,75 @@ namespace SimpleNetwork
                     {
                         Objects.Add(ob);
                     }
+                    Headers.AddRange(headers);
                     CompleteObject = true;
                 }
                 else
                 {
                     PacketHeader h = PacketHeader.GetHeader(Buffer);
+                    Headers.Add(h);
                     FullObject.AddRange(PacketHeader.RemoveHeader(Buffer));
                     if (h.FinalPacket)
                         CompleteObject = true;
                 }
             }
-            return Objects;
+            int i = 0;
+            foreach (PacketHeader h in Headers)
+            {
+                if (h.FinalPacket)
+                {
+                    if (h.Type != typeof(DisconnectionContext).FullName)
+                    {
+                        lock (LockObject)
+                            ObjectQueue.Add(ObjectParser.BytesToObject(Objects[i], Type.GetType(h.Type)));
+                        i++;
+                    }
+                    else
+                    {
+                        DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(Objects[i]);
+                        DisconnectedFrom(ctx);
+                    }
+                }
+            }
         }
+
+        //private List<byte[]> GetAllBytes()
+        //{
+        //    List<byte[]> Objects = new List<byte[]>();
+        //    List<byte> FullObject = new List<byte>();
+
+        //    bool CompleteObject = false;
+
+        //    while (!CompleteObject && Running)
+        //    {
+        //        while (Connection.Available == 0) ;
+        //        byte[] Buffer = new byte[Connection.Available];
+
+        //        int RecievedBytes = Connection.Receive(Buffer);
+
+        //        if (RecievedBytes < 65536)
+        //        {
+        //            List<PacketHeader> headers;
+        //            List<byte[]> objects = PacketHeader.GetObjects(Buffer, out headers);
+        //            FullObject.AddRange(objects[0]);
+        //            objects.RemoveAt(0);
+        //            Objects.Add(FullObject.ToArray());
+        //            foreach (byte[] ob in objects)
+        //            {
+        //                Objects.Add(ob);
+        //            }
+        //            CompleteObject = true;
+        //        }
+        //        else
+        //        {
+        //            PacketHeader h = PacketHeader.GetHeader(Buffer);
+        //            FullObject.AddRange(PacketHeader.RemoveHeader(Buffer));
+        //            if (h.FinalPacket)
+        //                CompleteObject = true;
+        //        }
+        //    }
+        //    return Objects;
+        //}
 
         private void ManagementLoop()
         {

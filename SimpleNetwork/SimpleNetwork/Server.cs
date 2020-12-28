@@ -7,6 +7,7 @@ namespace SimpleNetwork
 {
     public class Server
     {
+        #region properties
         private readonly IPAddress Address;
         private readonly int Port;
 
@@ -32,7 +33,9 @@ namespace SimpleNetwork
         private object LockObject = new object();
 
         private bool ConnectingClient = false;
+        #endregion
 
+        #region serverCode
         public Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
         {
             Address = iPAddress;
@@ -73,8 +76,7 @@ namespace SimpleNetwork
                 {
                     try
                     {
-                        Socket s = ServerSocket.Accept();
-                        Client c = new Client(s);
+                        Client c = new Client(ServerSocket.Accept());
 
                         ConnectingClient = true;
 
@@ -83,15 +85,16 @@ namespace SimpleNetwork
                             if (Running)
                             {
                                 Clients.Add(c);
-                                OnClientConnect?.Invoke(c.connectionInfo);
                                 c.OnDisconnect += ClientDisconnect;
                                 c.UpdateWaitTime = UpdateClientWaitTime;
                             }                                
                             else
                                 c.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
                         }
-
                         ConnectingClient = false;
+                        if (c.IsConnected)
+                            OnClientConnect?.Invoke(c.connectionInfo);
+
                     }
                     catch (SocketException)
                     {
@@ -164,6 +167,8 @@ namespace SimpleNetwork
         {
             Clients[index].SendObject(obj);
         }
+        #endregion
+        #region clientAccess
 
         /// <summary>
         /// Checks if a client's queue cotains object of type T
@@ -218,6 +223,10 @@ namespace SimpleNetwork
             }
         }
 
+        public void ClearClientQueue(ushort index) 
+        {
+            Clients[index].ClearQueue();
+        }
         /// <summary>
         /// Disconnects client at index
         /// </summary>
@@ -280,7 +289,7 @@ namespace SimpleNetwork
             }
             if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
         }
-
+        #endregion
         private void WaitForPendingConnections()
         {
             while (ConnectingClient) ;
@@ -318,10 +327,9 @@ namespace SimpleNetwork
                     }
                 }
 
-                if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
-
                 OnClientDisconnect?.Invoke(ctx, inf);
             }
+            if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
         }
 
         public class ClientAccessor

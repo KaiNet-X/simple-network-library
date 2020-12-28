@@ -3,8 +3,9 @@
     public static class GlobalDefaults
     {
         public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.REMOVE;
-        public static EncodingType ObjectEncodingType = EncodingType.MESSAGE_PACK;
+        public static EncodingType ObjectEncodingType = EncodingType.JSON;
         public static bool RunServerClientsOnOneThread = false;
+        public static MessagePack.MessagePackSerializerOptions Serializer = MessagePack.Resolvers.ContractlessStandardResolver.Options;
 
         public enum ForcibleDisconnectBehavior
         {

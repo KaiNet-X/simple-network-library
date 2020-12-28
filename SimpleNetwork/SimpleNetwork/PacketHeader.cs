@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Text;
 using Newtonsoft.Json;
 
@@ -7,20 +8,26 @@ namespace SimpleNetwork
     internal class PacketHeader
     {
         [JsonProperty]
-        internal readonly string UniqueTypeIdentifyer = "0xFFDD6969";
+        public readonly string UniqueTypeIdentifyer = "0xFFDD6969";
         [JsonProperty]
-        internal readonly int Index;
+        public readonly int Index;
         [JsonProperty]
-        internal readonly bool FinalPacket;
+        public readonly bool FinalPacket;
+        [JsonProperty]
+        public readonly string Type;
 
-        [JsonConstructor]
-        internal PacketHeader(int Index, bool FinalPacket)
+        //[JsonConstructor]
+        internal PacketHeader(int Index, bool FinalPacket, string Type)
         {
             this.Index = Index;
             this.FinalPacket = FinalPacket;
+            this.Type = Type;
         }
+        private PacketHeader()
+        {
 
-        internal static byte[] AddHeadders(byte[] Data)
+        }
+        internal static byte[] AddHeadders(byte[] Data, Type t)
         {
             int packetCount = Data.Length / 65536 + (Data.Length % 65536 > 0 ? 1 : 0);
             int headersLength = 0;
@@ -29,7 +36,8 @@ namespace SimpleNetwork
 
             for (int i = 0; i < packetCount; i++)
             {
-                string s = JsonConvert.SerializeObject(new PacketHeader(i, i == packetCount - 1));
+                string s = JsonConvert.SerializeObject(new PacketHeader(i, i == packetCount - 1, t.FullName));
+                //string s = ObjectParser.Serialize(new PacketHeader(i, i == packetCount - 1, t.FullName));
                 headersLength += s.Length;
                 headersJson.Add(s);
             }
@@ -39,8 +47,10 @@ namespace SimpleNetwork
             {
                 packetCount = newCount;
                 headersJson.RemoveAt(headersJson.Count - 1);
-                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, false)));
-                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, true)));
+                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, false, t.FullName)));
+                headersJson.Add(JsonConvert.SerializeObject(new PacketHeader((byte)headersJson.Count, true, t.FullName)));
+                //headersJson.Add(ObjectParser.Serialize(new PacketHeader((byte)headersJson.Count, false, t.FullName)));
+                //headersJson.Add(ObjectParser.Serialize(new PacketHeader((byte)headersJson.Count, false, t.FullName)));
             }
             List<byte> FullObject = new List<byte>(Data);
             for (int i = 0; i < packetCount; i++)
@@ -64,6 +74,7 @@ namespace SimpleNetwork
                 }
             }
             return JsonConvert.DeserializeObject<PacketHeader>(Encoding.UTF8.GetString(HeaderBytes.ToArray()));
+            //return ObjectParser.Deserialize<PacketHeader>(Encoding.UTF8.GetString(HeaderBytes.ToArray()));
         }
 
         internal static byte[] RemoveHeader(byte[] Packet)
@@ -125,7 +136,11 @@ namespace SimpleNetwork
             headers = new List<PacketHeader>();
 
             byte[] Full = bytes;
+
             byte[] searchBytes = Encoding.UTF8.GetBytes("{\"UniqueTypeIdentifyer\":\"0xFFDD6969\"");
+            //byte[] searchBytes = Encoding.UTF8.GetBytes("{UniqueTypeIdentifyer:\"0xFFDD6969\"");
+            
+            string test = Encoding.UTF8.GetString(bytes);
 
             while (Utilities.ByteArrayContains(Full, searchBytes))
             {
