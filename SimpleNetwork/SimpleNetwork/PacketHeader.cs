@@ -58,6 +58,10 @@ namespace SimpleNetwork
                 byte[] header = Encoding.UTF8.GetBytes(headersJson[i]);
                 FullObject.InsertRange(i * 65536, header);
             }
+            //for (int i = 0; i < packetCount; i++)
+            //{
+            //    string s = Encoding.UTF8.GetString(FullObject.GetRange(i * 65536, 110).ToArray());
+            //}
             return FullObject.ToArray();
         }
 
@@ -73,6 +77,8 @@ namespace SimpleNetwork
                     break;
                 }
             }
+            string test = Encoding.UTF8.GetString(Packet);
+            string test2 = Encoding.UTF8.GetString(HeaderBytes.ToArray());
             return JsonConvert.DeserializeObject<PacketHeader>(Encoding.UTF8.GetString(HeaderBytes.ToArray()));
             //return ObjectParser.Deserialize<PacketHeader>(Encoding.UTF8.GetString(HeaderBytes.ToArray()));
         }

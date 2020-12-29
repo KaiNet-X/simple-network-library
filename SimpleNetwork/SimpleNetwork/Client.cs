@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Linq;
 
 namespace SimpleNetwork
 {
@@ -313,7 +314,7 @@ namespace SimpleNetwork
             lock(LockObject)
                 if (IsConnected)
                 {
-                    Connection.Send(PacketHeader.AddHeadders(ObjectParser.ObjectToBytes(obj), typeof(T)));
+                    Connection.Send(ObjectHeader.AddHeadder(ObjectParser.ObjectToBytes(obj), typeof(T)));
                 }
         }
 
@@ -442,9 +443,9 @@ namespace SimpleNetwork
             {
                 while (Connection.Available == 0) ;
                 byte[] Buffer = new byte[Connection.Available];
-
+                
                 int RecievedBytes = Connection.Receive(Buffer);
-
+                
                 if (RecievedBytes < 65536)
                 {
                     List<PacketHeader> headers;
@@ -484,6 +485,64 @@ namespace SimpleNetwork
                         DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(Objects[i]);
                         DisconnectedFrom(ctx);
                     }
+                }
+            }
+        }
+
+        private void Recieve2()
+        {
+            bool CompleteObject = false;
+
+            List<(ObjectHeader, List<byte>)> headerObjectPairs = new List<(ObjectHeader, List<byte>)>();
+
+            while (!CompleteObject && Running)
+            {
+                while (Connection.Available == 0) ;
+                byte[] Buffer = new byte[Connection.Available];
+
+                int RecievedBytes = Connection.Receive(Buffer);
+
+                List<ObjectHeader> headers;
+                List<byte[]> objects = ObjectHeader.GetObjects(Buffer, out headers);
+
+                int HeaderStart = headerObjectPairs.Count - 1;
+
+                if (HeaderStart > -1 && headerObjectPairs[HeaderStart].Item2.Count != headerObjectPairs[HeaderStart].Item1.Length)
+                {
+                    headerObjectPairs[HeaderStart].Item2.AddRange(objects[objects.Count - 1]);
+                    objects.RemoveAt(objects.Count - 1);
+                }
+                foreach (ObjectHeader header in headers)
+                {
+                    headerObjectPairs.Add((header, new List<byte>(objects[0])));
+                    objects.RemoveAt(0);
+                }
+
+                //if (objects.Count > 0) headerObjectPairs[HeaderStart].Item2.AddRange(objects[0]);
+
+                foreach (var pair in headerObjectPairs)
+                {
+                    if (pair.Item2.Count == pair.Item1.Length)
+                    {
+                        CompleteObject = true;
+                        break;
+                    }
+                }
+            }
+            int i = 0;
+            foreach (var pair in headerObjectPairs)
+            {
+                if (pair.Item1.Type != typeof(DisconnectionContext).Name)
+                {
+                    Type type = Utilities.ResolveTypeFromName(pair.Item1.Type);
+                    lock (LockObject)
+                        ObjectQueue.Add(ObjectParser.BytesToObject(pair.Item2.ToArray(), type));
+                    i++;
+                }
+                else
+                {
+                    DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(pair.Item2.ToArray());
+                    DisconnectedFrom(ctx);
                 }
             }
         }
@@ -530,7 +589,7 @@ namespace SimpleNetwork
         {
             while (IsConnected)
             {
-                Recieve();
+                Recieve2();
                 Thread.Sleep(UpdateWaitTime);
             }
         }
