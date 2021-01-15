@@ -4,7 +4,8 @@
     {
         public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.REMOVE;
         public static EncodingType ObjectEncodingType = EncodingType.JSON;
-        public static bool RunServerClientsOnOneThread = false;
+        public static bool RunServerClientsOnOneThread = true;
+        public static bool OverwritePreviousOfTypeInQueue = false;
         public static MessagePack.MessagePackSerializerOptions Serializer = MessagePack.Resolvers.ContractlessStandardResolver.Options;
 
         public enum ForcibleDisconnectBehavior

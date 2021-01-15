@@ -48,21 +48,40 @@ namespace SimpleNetwork
             return cleanJson;
         }
 
+        //public static int IndexInByteArray(byte[] Bytes, byte[] SearchBytes, int offset = 0)
+        //{
+        //    int index = -1;
+        //    int Difference = Bytes.Length - SearchBytes.Length;
+
+        //    for (int i = offset; i <= Bytes.Length - SearchBytes.Length; i++)
+        //    {
+        //        if (i > Difference) break;
+        //        if (Bytes.Skip(i).Take(SearchBytes.Length).SequenceEqual(SearchBytes))
+        //        {
+        //            index = i;
+        //            break;
+        //        }
+        //    }
+        //    return index;
+        //}
+
         public static int IndexInByteArray(byte[] Bytes, byte[] SearchBytes, int offset = 0)
         {
-            int index = -1;
-            int Difference = Bytes.Length - SearchBytes.Length;
-
             for (int i = offset; i <= Bytes.Length - SearchBytes.Length; i++)
             {
-                if (i > Difference) break;
-                if (Bytes.Skip(i).Take(SearchBytes.Length).SequenceEqual(SearchBytes))
+                for (int I = 0; I < SearchBytes.Length; I++)
                 {
-                    index = i;
-                    break;
+                    if (!SearchBytes[I].Equals(Bytes[i + I]))
+                    {
+                        break;
+                    }
+                    else if (I == SearchBytes.Length - 1 && SearchBytes[I].Equals(Bytes[i + I]))
+                    {
+                        return i;
+                    }
                 }
             }
-            return index;
+            return -1;
         }
 
         public static bool ByteArrayContains(byte[] Bytes, byte[] SearchBytes)

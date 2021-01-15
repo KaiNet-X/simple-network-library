@@ -140,6 +140,8 @@ namespace SimpleNetwork
             DisconnectAllClients(true);
         }
 
+        #region clientAccess
+
         /// <summary>
         /// Sends Object t to all clients
         /// </summary>
@@ -167,8 +169,6 @@ namespace SimpleNetwork
         {
             Clients[index].SendObject(obj);
         }
-        #endregion
-        #region clientAccess
 
         /// <summary>
         /// Checks if a client's queue cotains object of type T
@@ -204,6 +204,26 @@ namespace SimpleNetwork
             return Clients[index].WaitForPullObject<T>();
         }
 
+        public object[] GetClientQueueObjectsTypeless(ushort index, bool clear = false)
+        {
+            object[] obs;
+            lock(LockObject)
+            {
+                obs = Clients[index].GetQueueObjectsTypeless(clear);
+            }
+            return obs;
+        }
+
+        public T[] GetClientQueueTyped<T>(ushort index, bool clear = false)
+        {
+            T[] obs;
+            lock (LockObject)
+            {
+                obs = Clients[index].GetQueueObjectsTyped<T>(clear);
+            }
+            return obs;
+        }
+
         /// <summary>
         /// clears all of the disconnected cients
         /// </summary>
@@ -223,10 +243,27 @@ namespace SimpleNetwork
             }
         }
 
+        /// <summary>
+        /// Clears the queue of one client
+        /// </summary>
+        /// <param name="index"></param>
         public void ClearClientQueue(ushort index) 
         {
             Clients[index].ClearQueue();
         }
+
+        /// <summary>
+        /// Clears the queues of all clients
+        /// </summary>
+        public void ClearAllQueue()
+        {
+            lock(LockObject)
+            {
+                foreach (Client c in Clients)
+                    c.ClearQueue();
+            }
+        }
+
         /// <summary>
         /// Disconnects client at index
         /// </summary>
@@ -289,7 +326,10 @@ namespace SimpleNetwork
             }
             if (remove && RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
         }
+
         #endregion
+        #endregion
+
         private void WaitForPendingConnections()
         {
             while (ConnectingClient) ;
