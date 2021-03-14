@@ -10,12 +10,16 @@ namespace SimpleNetwork
         [JsonProperty] public readonly string UniqueTypeIdentifyer = "0xFFDD6969";
         [JsonProperty] public readonly string Type;
         [JsonProperty] public readonly long Length;
+        [JsonProperty] public readonly bool IsFile;
+        [JsonProperty] public readonly long FileLength;
 
         //[JsonConstructor]
-        internal ObjectHeader(string Type, long Length)
+        internal ObjectHeader(string Type, long Length, bool IsFile = false, long FileLength = 0)
         {
             this.Type = Type;
             this.Length = Length;
+            this.IsFile = IsFile;
+            this.FileLength = FileLength;
         }
 
         private ObjectHeader()
@@ -27,7 +31,15 @@ namespace SimpleNetwork
         {
             List<byte> full = new List<byte>(Data);
             full.InsertRange(0, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new ObjectHeader(t.Name, Data.Length))));
-            
+
+            return full.ToArray();
+        }
+
+        internal static byte[] AddHeadderFile(byte[] Data, string Extension, long Length)
+        {
+            List<byte> full = new List<byte>(Data);
+            full.InsertRange(0, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new ObjectHeader(Extension, Data.Length, true, Length))));
+
             return full.ToArray();
         }
 
@@ -43,7 +55,8 @@ namespace SimpleNetwork
                     break;
                 }
             }
-            return JsonConvert.DeserializeObject<ObjectHeader>(Encoding.UTF8.GetString(HeaderBytes.ToArray()));
+            string head = Encoding.UTF8.GetString(HeaderBytes.ToArray());
+            return JsonConvert.DeserializeObject<ObjectHeader>(head);
         }
 
         internal static byte[] RemoveHeader(byte[] Packet)
@@ -65,7 +78,7 @@ namespace SimpleNetwork
             return Headerless.ToArray();
         }
 
-        internal static List<byte[]> GetObjects(byte[] bytes, out List<ObjectHeader> headers)
+        internal static List<byte[]> GetObjects(ref byte[] bytes, out List<ObjectHeader> headers)
         {
             List<byte[]> Objects = new List<byte[]>();
             headers = new List<ObjectHeader>();
@@ -111,7 +124,24 @@ namespace SimpleNetwork
                     NewObj = Full;
                 }
 
-                headers.Add(GetHeader(Full));
+                try
+                {
+                    ObjectHeader h = GetHeader(Full);
+                    headers.Add(h);
+                }
+                catch (JsonReaderException)
+                {
+                    if (Partial.Length > 0) Objects.Add(Partial);
+                    bytes = Full;
+                    return Objects;
+                }
+                catch (JsonSerializationException)
+                {
+                    if (Partial.Length > 0) Objects.Add(Partial);
+                    bytes = Full;
+                    return Objects;
+                }
+
                 Objects.Add(RemoveHeader(NewObj));
 
                 if(EndOfObject != -1)
@@ -123,7 +153,7 @@ namespace SimpleNetwork
             }
 
             if (Partial.Length > 0) Objects.Add(Partial);
-
+            bytes = null;
             return Objects;
         }
     }

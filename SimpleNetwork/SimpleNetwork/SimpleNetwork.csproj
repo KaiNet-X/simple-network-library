@@ -2,14 +2,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
-    <Description>Library for easy, flexible networking. Large amount of control but works straight out of the box</Description>
+    <Description>Library for easy, flexible networking. Send and recieve any object in as little as six lines. Works straight out of the box, and many options to control the network and methods to access it</Description>
     <Authors>Kai</Authors>
     <Company>KaiNet</Company>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/KaiNet-X/simple-network-library</RepositoryUrl>
     <PackageTags>socket, sockets, network, networking, tcp, network</PackageTags>
     <PackageId>KaiNet.SimpleNetwork</PackageId>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <FileUpgradeFlags>40</FileUpgradeFlags>
     <UpgradeBackupLocation>C:\Users\Kai\source\repos\SimpleNetwork\Backup\SimpleNetwork\</UpgradeBackupLocation>
     <OldToolsVersion>2.0</OldToolsVersion>

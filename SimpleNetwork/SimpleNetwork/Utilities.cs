@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace SimpleNetwork
 {
@@ -48,23 +51,6 @@ namespace SimpleNetwork
             return cleanJson;
         }
 
-        //public static int IndexInByteArray(byte[] Bytes, byte[] SearchBytes, int offset = 0)
-        //{
-        //    int index = -1;
-        //    int Difference = Bytes.Length - SearchBytes.Length;
-
-        //    for (int i = offset; i <= Bytes.Length - SearchBytes.Length; i++)
-        //    {
-        //        if (i > Difference) break;
-        //        if (Bytes.Skip(i).Take(SearchBytes.Length).SequenceEqual(SearchBytes))
-        //        {
-        //            index = i;
-        //            break;
-        //        }
-        //    }
-        //    return index;
-        //}
-
         public static int IndexInByteArray(byte[] Bytes, byte[] SearchBytes, int offset = 0)
         {
             for (int i = offset; i <= Bytes.Length - SearchBytes.Length; i++)
@@ -100,7 +86,7 @@ namespace SimpleNetwork
             return sequenceFound;
         }
 
-        public static bool IsArray(string typeName) => typeName.Contains(',');
+        public static bool IsArray(string typeName) => typeName.Contains('[');
 
         public static Type ResolveTypeFromName(string name)
         {
@@ -123,7 +109,7 @@ namespace SimpleNetwork
             return type;
         }
 
-        public static string GetBaseTypeName(string typeName) => 
+        public static string GetBaseTypeName(string typeName) =>
             typeName.Replace("[", "").Replace(",", "").Replace("]", "");
 
         public static Type JaggedArrayType(Type baseType, byte dimensions)

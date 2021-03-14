@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using System.Linq;
+using System.IO;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
 
 namespace SimpleNetwork
 {
@@ -14,14 +16,27 @@ namespace SimpleNetwork
         private List<object> ObjectQueue = new List<object>();
         private Dictionary<string, Type> NameTypeAssociations = new Dictionary<string, Type>();
 
+        private RSAParameters RSAKey;
+        byte[] Key;
+
+        internal bool RecivedKey = false;
+
+        public string[] Files
+        {
+            get 
+            {
+                string currentPath = Path.IsPathRooted(GlobalDefaults.FilePath) ?
+                        GlobalDefaults.FilePath : Directory.GetCurrentDirectory() + GlobalDefaults.FilePath;
+                return Directory.Exists(currentPath) ? Directory.GetFiles(currentPath) : null;
+            }
+        }
+
         public int UpdateWaitTime = 1000;
         public int QueuedObjectCount => ObjectQueue.Count;
         public ConnectionInfo connectionInfo { get; private set; }
 
         public bool Running = true;
         public bool IsConnected { get; private set; } = false;
-
-        private bool TryingConnect = false;
 
         public DisconnectionContext DisconnectionMode { get; private set; }
 
@@ -31,11 +46,15 @@ namespace SimpleNetwork
         /// </summary>
         public event Disconnected OnDisconnect;
 
+        public delegate void RecievedFile(string path);
         public delegate void Connected(ConnectionInfo inf);
+        internal delegate void RecievedFileServer(string path, ConnectionInfo info);
         /// <summary>
         /// Triggered when the BeginConnect finishes
         /// </summary>
         public event Connected OnConnect;
+        public event RecievedFile OnFileRecieve;
+        internal event RecievedFileServer OnServerRecieve;
 
         private readonly object LockObject = new object();
 
@@ -49,13 +68,21 @@ namespace SimpleNetwork
 
             connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
             Running = true;
+                
             if (!GlobalDefaults.RunServerClientsOnOneThread)
             {
                 BackgroundWorker = new Thread(() =>
                 {
                     ManagementLoop();
                 });
+                BackgroundWorker.IsBackground = true;
                 BackgroundWorker.Start();
+            }
+            if (GlobalDefaults.UseEncryption)
+            {
+                RSAParameters PublicKey;
+                CryptoServices.GenerateKeyPair(out PublicKey, out RSAKey);
+                SendObject(PublicKey);
             }
         }
 
@@ -96,7 +123,12 @@ namespace SimpleNetwork
             {
                 ManagementLoop();
             });
+
+            BackgroundWorker.IsBackground = true;
             BackgroundWorker.Start();
+
+            if (GlobalDefaults.UseEncryption)
+                while (!RecivedKey) ;
         }
 
         /// <summary>
@@ -106,32 +138,18 @@ namespace SimpleNetwork
         /// <param name="port">port number of the server</param>
         public void Connect(string address, int port)
         {
-            while (!Connection.Connected)
-            {
-                try
-                {
-                    if (!IsConnected)
-                    {
-                        Connection.Connect(new IPEndPoint(IPAddress.Parse(address), port));
-                        IsConnected = true;
-                        Running = true;
-
-                        IPEndPoint loc = Connection.LocalEndPoint as IPEndPoint;
-                        IPEndPoint rem = Connection.RemoteEndPoint as IPEndPoint;
-
-                        connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
-                    }
-                }
-                catch (SocketException) { }
-            }
-
-            BackgroundWorker = new Thread(() =>
-            {
-                ManagementLoop();
-            });
-            BackgroundWorker.Start();
+            Connect(IPAddress.Parse(address), port);
         }
 
+        public async Task ConnectAsync(IPAddress address, int port)
+        {
+            await Task.Run(() => Connect(address, port)).ConfigureAwait(false);
+        }
+
+        public async Task ConnectAsync(string address, int port)
+        {
+            await ConnectAsync(IPAddress.Parse(address), port).ConfigureAwait(false);
+        }
         /// <summary>
         /// Connects to server with specified address and port. 
         /// Allows code to continue when connecting.
@@ -142,8 +160,7 @@ namespace SimpleNetwork
         {
             BackgroundWorker = new Thread(() =>
             {
-                TryingConnect = true;
-                while (!IsConnected && TryingConnect)
+                while (!IsConnected)
                 {
                     try
                     {
@@ -175,11 +192,10 @@ namespace SimpleNetwork
                     }
                     Thread.Sleep(UpdateWaitTime);
                 }
-                if (!TryingConnect) return;
-                TryingConnect = false;
 
                 ManagementLoop();
             });
+            BackgroundWorker.IsBackground = true;
             BackgroundWorker.Start();
         }
 
@@ -191,55 +207,7 @@ namespace SimpleNetwork
         /// <param name="port">port number of the server</param>
         public void BeginConnect(string address, int port)
         {
-            BackgroundWorker = new Thread(() =>
-            {
-                TryingConnect = true;
-                while (!IsConnected && TryingConnect)
-                {
-                    try
-                    {
-                        if (!IsConnected)
-                        {
-                            Connection.Connect(new IPEndPoint(IPAddress.Parse(address), port));
-
-                            IsConnected = true;
-                            Running = true;
-
-                            IPEndPoint loc = Connection.LocalEndPoint as IPEndPoint;
-                            IPEndPoint rem = Connection.RemoteEndPoint as IPEndPoint;
-
-                            connectionInfo = new ConnectionInfo(loc.Address, Dns.GetHostName(), rem.Address, Dns.GetHostEntry(rem.Address).HostName);
-
-                            try
-                            {
-                                OnConnect?.Invoke(connectionInfo);
-                            }
-                            catch
-                            {
-
-                            }
-                        }
-                    }
-                    catch (SocketException)
-                    {
-                        //IsConnected = false;
-                    }
-                    Thread.Sleep(UpdateWaitTime);
-                }
-                if (!TryingConnect) return;
-                TryingConnect = false;
-
-                ManagementLoop();
-            });
-            BackgroundWorker.Start();
-        }
-
-        /// <summary>
-        /// Cancels BeginConnect.
-        /// </summary>
-        public void CancelConnect()
-        {
-            TryingConnect = false;
+            BeginConnect(IPAddress.Parse(address), port);
         }
 
         #region ServerUse
@@ -311,7 +279,7 @@ namespace SimpleNetwork
             lock (LockObject)
                 ObjectQueue.Clear();
         }
-        
+
         /// <summary>
         /// Sends object of type T to the server.
         /// </summary>
@@ -319,11 +287,136 @@ namespace SimpleNetwork
         /// <param name="obj">Object of any type</param>
         public void SendObject<T>(T obj)
         {
-            lock(LockObject)
+            if (GlobalDefaults.UseEncryption && !RecivedKey && Key == null && !typeof(T).Equals(typeof(RSAParameters)))
+                while (!RecivedKey) ;
+
+            lock (LockObject)
                 if (IsConnected)
                 {
-                    Connection.Send(ObjectHeader.AddHeadder(ObjectParser.ObjectToBytes(obj), typeof(T)));
+                    byte[] bytes = ObjectParser.ObjectToBytes(obj);
+                    if (GlobalDefaults.UseEncryption)
+                    {
+                        if (!RecivedKey)
+                        {
+                            if (Key != null)
+                                bytes = CryptoServices.EncryptRSA(bytes, RSAKey);
+                        }
+                        else
+                        {
+                            bytes = CryptoServices.EncryptAES(bytes, Key);
+                        }
+                    }
+                    Connection.Send(ObjectContainer.Encapsulate(bytes, typeof(T).Name));
                 }
+        }
+
+        public async Task SendObjectAsync<T>(T obj)
+        {
+            if (!RecivedKey && Key == null && !typeof(T).Equals(typeof(RSAParameters)))
+                await Task.Run(() => 
+                { 
+                    while (!RecivedKey) ;
+                });
+
+            Task t = null;
+
+            lock (LockObject)
+                if (IsConnected)
+                {
+                    byte[] bytes = ObjectParser.ObjectToBytes(obj);
+                    if (GlobalDefaults.UseEncryption)
+                    {
+                        if (!RecivedKey)
+                        {
+                            if (Key != null)
+                                bytes = CryptoServices.EncryptRSA(bytes, RSAKey);
+                        }
+                        else
+                        {
+                            bytes = CryptoServices.EncryptAES(bytes, Key);
+                        }
+                    }
+                    t = Task.Run(() =>
+                    {
+                        Connection.Send(ObjectContainer.Encapsulate(bytes, typeof(T).Name));
+                    });
+                }
+
+            await t.ConfigureAwait(false);
+        }
+
+        public void SendFile(string path, string name = null)
+        {
+            name = name != null ? name + Path.GetExtension(path) : Path.GetFileName(path);
+
+            int size = 2048;
+
+            using (FileStream fs = File.OpenRead(path))
+            {
+                byte[] bytes = new byte[size];
+                int bit;
+                int i = 0;
+                while ((bit = fs.ReadByte()) != -1)
+                {
+                    if (i == size)
+                    {
+                        i = 0;
+                        SendFileSegment(bytes, name, fs.Length);
+                        bytes = new byte[size];
+                    }
+                    bytes[i] = (byte)bit;
+                    i++;
+                }
+                byte[] lastBytes = new byte[i];
+                for (int j = 0; j < i; j++)
+                {
+                    lastBytes[j] = bytes[j];
+                }
+                SendFileSegment(bytes, name, fs.Length);
+            }
+        }
+
+        public async Task SendFileAsync(string path, string name = null)
+        {
+            name = name != null ? name + Path.GetExtension(path) : Path.GetFileName(path);
+
+            int size = 2048;
+
+            using (FileStream fs = File.OpenRead(path))
+            {
+                byte[] bytes = new byte[size];
+                int bit;
+                int i = 0;
+                while ((bit = fs.ReadByte()) != -1)
+                {
+                    if (i == size)
+                    {
+                        i = 0;
+                        await Task.Run(() => SendFileSegment(bytes, name, fs.Length)).ConfigureAwait(false);
+                        bytes = new byte[size];
+                    }
+                    bytes[i] = (byte)bit;
+                    i++;
+                }
+                byte[] lastBytes = new byte[i];
+                for (int j = 0; j < i; j++)
+                {
+                    lastBytes[j] = bytes[j];
+                }
+                await Task.Run(() => SendFileSegment(bytes, name, fs.Length)).ConfigureAwait(false);
+            }
+        }
+
+        private void SendFileSegment(byte[] bytes, string name, long length)
+        {
+            lock (LockObject)
+            {
+                if (GlobalDefaults.UseEncryption)
+                {
+                    bytes = CryptoServices.EncryptAES(bytes, Key);
+                }
+                Connection.Send(ObjectContainer.Encapsulate(bytes, name, length));
+            }
         }
 
         /// <summary>
@@ -334,7 +427,9 @@ namespace SimpleNetwork
         /// <returns>First occurrence of T in queue. If it does not exist, return default.</returns>
         public T PullObject<T>()
         {
-            lock(LockObject)
+            while (GlobalDefaults.UseEncryption && !RecivedKey) ;
+
+            lock (LockObject)
             {
                 for (int i = 0; i < ObjectQueue.Count; i++)
                 {
@@ -351,6 +446,12 @@ namespace SimpleNetwork
             }
         }
 
+        public async Task<T> PullObjectAsync<T>()
+        {
+            var t = Task.Run(() => WaitForPullObject<T>());
+            return await t;
+        }
+
         /// <summary>
         /// Waits until there is an object(T), and then pulls it.
         /// </summary>
@@ -360,6 +461,7 @@ namespace SimpleNetwork
         {
             do
             {
+                while (GlobalDefaults.UseEncryption && !RecivedKey) ;
                 lock (LockObject)
                     for (int i = 0; i < ObjectQueue.Count; i++)
                     {
@@ -444,141 +546,147 @@ namespace SimpleNetwork
             return objects.ToArray();
         }
 
+        public async Task<object[]> GetQueueObjectsTypelessAsync(bool clear = false)
+        {
+            return await Task.Run(() => GetQueueObjectsTypeless(clear)).ConfigureAwait(false);
+        }
+
+        public async Task<T[]> GetQueueObjectsTypedAsync<T>(bool clear = false)
+        {
+            return await Task.Run(() => GetQueueObjectsTyped<T>(clear)).ConfigureAwait(false);
+        }
+
         #endregion
         #endregion
 
         private void Recieve()
         {
-            bool CompleteObject = false;
-
-            List<(ObjectHeader, List<byte>)> headerObjectPairs = new List<(ObjectHeader, List<byte>)>();
-
-            while (!CompleteObject && Running)
+            IEnumerator<object> coroutine = RecieveCoroutine();
+            while (Running)
             {
-                while (Connection.Available == 0) ;
-                byte[] Buffer = new byte[Connection.Available];
-
-                int RecievedBytes = Connection.Receive(Buffer);
-
-                List<ObjectHeader> headers;
-                List<byte[]> objects = ObjectHeader.GetObjects(Buffer, out headers);
-
-                int HeaderStart = headerObjectPairs.Count - 1;
-
-                if (HeaderStart > -1 && headerObjectPairs[HeaderStart].Item2.Count != headerObjectPairs[HeaderStart].Item1.Length)
-                {
-                    headerObjectPairs[HeaderStart].Item2.AddRange(objects[objects.Count - 1]);
-                    objects.RemoveAt(objects.Count - 1);
-                }
-                foreach (ObjectHeader header in headers)
-                {
-                    headerObjectPairs.Add((header, new List<byte>(objects[0])));
-                    objects.RemoveAt(0);
-                }
-                foreach (var pair in headerObjectPairs)
-                {
-                    if (pair.Item2.Count == pair.Item1.Length)
-                    {
-                        CompleteObject = true;
-                        break;
-                    }
-                }
+                RecieveCoroutine().MoveNext();
             }
-            int i = 0;
-            foreach (var pair in headerObjectPairs)
-            {
-                if (pair.Item1.Type != typeof(DisconnectionContext).Name)
-                {
-                    Type type = GetTypeFromName(pair.Item1.Type);
-                    lock (LockObject)
-                    {
-                        if (GlobalDefaults.OverwritePreviousOfTypeInQueue)
-                        {
-                            for (int j = 0; j < ObjectQueue.Count; j++)
-                            {
-                                if (ObjectQueue[j].GetType() == type)
-                                {
-                                    ObjectQueue.RemoveAt(j);
-                                    j--;
-                                }
-                            }
-                        }
-                        ObjectQueue.Add(ObjectParser.BytesToObject(pair.Item2.ToArray(), type));
-                    }
-                    i++;
-                }
-                else
-                {
-                    DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(pair.Item2.ToArray());
-                    DisconnectedFrom(ctx);
-                }
-            }
+            coroutine.Dispose();
         }
 
         private IEnumerator<object> RecieveCoroutine()
         {
-            bool CompleteObject = false;
+            List<ObjectContainer> objects = new List<ObjectContainer>();
 
-            List<(ObjectHeader, List<byte>)> headerObjectPairs = new List<(ObjectHeader, List<byte>)>();
+            byte[] Temp = null;
 
-            while (!CompleteObject && Running)
+            while (Running)
             {
-                while (Connection.Available == 0) yield break;
+                while (Connection.Available == 0) yield return null;
                 byte[] Buffer = new byte[Connection.Available];
 
-                int RecievedBytes = Connection.Receive(Buffer);
+                Connection.Receive(Buffer);
 
-                List<ObjectHeader> headers;
-                List<byte[]> objects = ObjectHeader.GetObjects(Buffer, out headers);
+                if (Temp != null)
+                {
+                    List<byte> bytes = new List<byte>(Temp);
+                    bytes.AddRange(Buffer);
+                    Buffer = bytes.ToArray();
 
-                int HeaderStart = headerObjectPairs.Count - 1;
+                }
 
-                if (HeaderStart > -1 && headerObjectPairs[HeaderStart].Item2.Count != headerObjectPairs[HeaderStart].Item1.Length)
-                {
-                    headerObjectPairs[HeaderStart].Item2.AddRange(objects[objects.Count - 1]);
-                    objects.RemoveAt(objects.Count - 1);
-                }
-                foreach (ObjectHeader header in headers)
-                {
-                    headerObjectPairs.Add((header, new List<byte>(objects[0])));
-                    objects.RemoveAt(0);
-                }
-                foreach (var pair in headerObjectPairs)
-                {
-                    if (pair.Item2.Count == pair.Item1.Length)
-                    {
-                        CompleteObject = true;
-                        break;
-                    }
-                }
+                ObjectContainer[] obj = ObjectContainer.GetPackets(ref Buffer);
+                Temp = Buffer;
+
+                if (obj != null)
+                    objects.AddRange(obj);
+
+                if (Temp == null) break;
             }
-            int i = 0;
-            foreach (var pair in headerObjectPairs)
+            foreach (var item in objects)
             {
-                if (pair.Item1.Type != typeof(DisconnectionContext).Name)
+                Type type = item.Type != null ? GetTypeFromName(item.Type) : null;
+
+                if (!RecivedKey && GlobalDefaults.UseEncryption)
                 {
-                    Type type = GetTypeFromName(pair.Item1.Type);
-                    lock (LockObject)
+                    if (type.Equals(typeof(RSAParameters)))
                     {
-                        if (GlobalDefaults.OverwritePreviousOfTypeInQueue)
-                        {
-                            for (int j = 0; j < ObjectQueue.Count; j++)
-                            {
-                                if (ObjectQueue[j].GetType() == type)
-                                {
-                                    ObjectQueue.RemoveAt(j);
-                                    j--;
-                                }
-                            }
-                        }
-                        ObjectQueue.Add(ObjectParser.BytesToObject(pair.Item2.ToArray(), type));
+                        RSAKey = (RSAParameters)ObjectParser.BytesToObject(item.content, type);
+                        Key = CryptoServices.CreateHash(Guid.NewGuid().ToByteArray());
+
+                        SendObject(Key);
+                        RecivedKey = true;
                     }
-                    i++;
+                    else if (type.Equals(typeof(byte[])))
+                    {
+                        Key = CryptoServices.DecryptRSA(item.content, RSAKey);
+                        Key = (byte[])ObjectParser.BytesToObject(Key, type);
+                        RecivedKey = true;
+                    }
                 }
                 else
                 {
-                    DisconnectionContext ctx = ObjectParser.BytesToObject<DisconnectionContext>(pair.Item2.ToArray());
-                    DisconnectedFrom(ctx);
+                    byte[] content = item.content;
+
+                    if (GlobalDefaults.UseEncryption)
+                    {
+                        content = CryptoServices.DecryptAES(item.content, Key);
+                    }
+
+                    if (type == null)
+                    {
+                        long length = 0;
+                        string dir = GlobalDefaults.FileDirectory;
+                        FileStream fs;
+
+                        if (!Directory.Exists(dir))
+                            Directory.CreateDirectory(dir);
+                        if (!File.Exists($@"{dir}\{item.fileInfo.Name}"))
+                            fs = File.Create($@"{dir}\{item.fileInfo.Name}");
+                        else
+                            fs = new FileStream($@"{dir}\{item.fileInfo.Name}", FileMode.Append);
+
+                        fs.Write(content, 0, content.Length);
+                        fs.Flush();
+                        length = fs.Length;
+                        fs.Dispose();
+
+                        if (length >= item.fileInfo.Length)
+                        {
+                            OnFileRecieve?.Invoke($@"{dir}\{item.fileInfo.Name}");
+                            OnServerRecieve?.Invoke($@"{dir}\{item.fileInfo.Name}", connectionInfo);
+                        }
+                    }
+                    else
+                    {
+                        if (type == typeof(DisconnectionContext))
+                        {
+                            DisconnectionContext ctx;
+                            if (GlobalDefaults.UseEncryption && !RecivedKey)
+                            {
+                                ctx = new DisconnectionContext { type = DisconnectionContext.DisconnectionType.FORCIBLE };
+                            }
+                            else
+                            {
+                                ctx = ObjectParser.BytesToObject<DisconnectionContext>(content);
+                            }
+
+                            DisconnectedFrom(ctx);
+                        }
+                        else
+                        {
+                            lock (LockObject)
+                            {
+                                if (GlobalDefaults.OverwritePreviousOfTypeInQueue)
+                                {
+                                    for (int j = 0; j < ObjectQueue.Count; j++)
+                                    {
+                                        if (ObjectQueue[j].GetType() == type)
+                                        {
+                                            ObjectQueue.RemoveAt(j);
+                                            j--;
+                                        }
+                                    }
+                                }
+                                ObjectQueue.Add(ObjectParser.BytesToObject(content, type));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -618,7 +726,7 @@ namespace SimpleNetwork
                 GlobalDefaults.ForcibleDisconnectMode == GlobalDefaults.ForcibleDisconnectBehavior.REMOVE);
 
             DisconnectionMode = ctx;
-
+            IsConnected = false;
             try
             {
                 OnDisconnect?.Invoke(DisconnectionMode, connectionInfo);
@@ -628,13 +736,12 @@ namespace SimpleNetwork
 
             }
 
-            Connection?.Close();
-
+            Running = false;
             IsConnected = false;
+            Connection?.Close();
 
             if (remove)
             {
-                Running = false;
                 ObjectQueue?.Clear();
             }
         }

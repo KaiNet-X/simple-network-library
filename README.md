@@ -1,26 +1,13 @@
 # simple-network-library
-SimpleNetwork is a .NET standard library that greatly simplifies the process of networking. 
+SimpleNetwork is a .NET standard library that is compatible with most poject types that greatly simplifies the process of networking. 
 
-Simple net allows you to start and initialize a flexible tcp server in as little as two lines. 
-It contains two main classes, client and server, each that are easy to get connected and sending information between them.
+Simple net allows you to start and initialize a flexible tcp server in as little as two lines. It contains two main classes, client and server, each that are easy to get connected and sending information between them.
 
-You can send objects to the Server using the SendObject method.
-The client class automatically recieves information sent by the remote device. It is then stored in a private object queue.
-You can acess this information using the generic PullObject and WaitForPullObject.
-Both methods check the object queue for the specified object type if it is found, it is removed from the queue in a first-in-first-out fasion.
-If Pullobject does not find it, it returns default.
-WaitForPullObject loops until the object is queued, and then returns it.
-The generic method HasObjectOfType returns true if the queue has the object, otherwise returns false.
-The disconnection context class tells the remote device what to do on disconnect.
-If it is set to close connection, the connection is disposed of and the queue is left intact to get the last information from.
-If the context is set to remove, the connection is disposed of and the client is cleared.
-If the context is set to forcible, meaning the clients disconnected ungracefully, the client uses the default behavior for forcible disconnection in the global defaults class.
-There is an OnDisconnect event that sends a DisconnectionContext as well as a Connectioninfo class, which is called when the remote device disconnects from it.
+The Client object manages data it recieves converting it back to the original type it was sent as, and has many different methods of accessing said data. It\'s send methods are generic, allwoing the user to send any object without effort.
 
-The server class has a client cap that can be set in the constructor. 
-When clients connect to it, they are added to a private list of clients. The user can send objects to them using the SendToAll method, or the SendToClient method that requires an index. 
-To recieve information, there is a method called PullFromClient that takes an index parameter.
-There is an OnConnect as well as an OnDisconnect event that is called whenever a client connects or disconnects.
+The Server object manages client connections, storing clients in a list. It has methods for working with clients and allows sending to one client or all clients. It allows the user the same flexibility of sending and recievign data, only it is on the server side.
+
+These classes are all you need to get started, but if you want more granular control and managemet of the system, there is the static GlobalDefaults class which allows you to configure certain behaviors, DisconnectionContext class which determines the remote endpoint\'s behavior when disconnected from that you can view, and the ConnectionInfo class which has the IP address and name of remote endpoints.
 
 ## Getting started
 So, how do you actually send data?
@@ -32,25 +19,25 @@ S.StartServer()
 Client c = new Client();
 c.Connect(IPAddress.Loopback, 5454);
 
-s.SendToAll([Any object]);
+s.SendToAll([object T]);
 
-[Any object] obj = c.WaitForPullObject<T>();
+T obj = c.WaitForPullObject<T>();
 ~~~
-[Any object] is anyt object type of your chosing. Yes, you no longer have to create some confusing format for sending over sockets and implement it on every single object, you can simply send it and it works.
+T is any object type of your chosing. Yes, you no longer have to create some confusing format for sending over sockets and implement it on every single object, you can simply send it and it works.
 
 Now, if you want to send from the client, simply replace
 ~~~
 s.SendToAll(obj);
 
-[Any object] obj = c.WaitForPullObject<[Any object]>();
+T obj = c.WaitForPullObject<T>();
 ~~~
 with
 ~~~
-c1.SendObject(Test1);
+c.SendObject(Test1);
 
-[Any object] o1 = S.WaitForPullFromClient<[Any object]>(0);
+T o1 = S.WaitForPullFromClient<T>(0);
 ~~~
-## Sending between applications
+## Basic data transfer between applications
 Create your server application
 ~~~
 using System;
@@ -66,7 +53,11 @@ namespace ServerAppilcation
             Server S = new Server(IPAddress.Loopback, 5454, 1);
             S.StartServer();
 
-            Console.WriteLine(S.WaitForPullFromClient<string>(1));
+			/*
+			** waiting for string to be recieved on the first client
+			** and print to console
+			*/
+            Console.WriteLine(S.WaitForPullFromClient<string>(0));
 
             S.SendToAll("Goodbye");
 
@@ -89,7 +80,8 @@ namespace ClientApplication
         {
             Client C = new Client();
             C.Connect(IPAddress.Parse("192.168.0.17"), 5454);
-
+			
+			// sends user input
             C.SendObject(Console.ReadLine());
 
             Console.WriteLine(C.WaitForPullObject<string>());
@@ -99,164 +91,348 @@ namespace ClientApplication
     }
 }
 ~~~
-Now that you have a basic understanding on how this library works, on to the documentation!
+Now that you have a basic understanding on how this library works, on to the extensive documentation!
 
 # Docs
+### Server
 
-##### Classes
-* Server
 -- Manages multiple client connections. Has methods for sending to clients, recieving from clients, and events that allow you to track new connections and disconnections.
-* Client
+
+##### Constructors
+~~~
+new Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
+new Server(string iPAddress, int PortNum, ushort MaxClients)
+~~~
+##### Server management
+~~~
+// Starts accepting connections. Stops when max clients have been reached 
+StartServer()
+
+// Stops accepting connections
+StopServer()
+
+// Stops accepting connections, closes and removes existing connections
+Close()
+
+// Removes all clients that have disconnected from client list. It's data // is no longer accessible.
+ClearDisconnectedClients()
+~~~
+##### Work with clients
+~~~
+// Send object to all clients
+SendToAll<T>(T obj)
+
+// Send object to client at index
+SendToOne<T>(T obj, ushort index)
+
+// Sends file to all clients
+SendFileToAll(string path, string name = null)
+
+// Sends file to client at specific index
+SendFileToOne(string path, ushort index, string name = null)
+
+// Asyncronous versions of previous methods
+Task SendToAllAsync<T>(T obj)
+Task SendToOneAsync<T>(T obj, ushort index)
+Task SendFileToAllAsync(string path, string name = null)
+Task SendFileToOneAsync(string path, ushort index, string name = null)
+
+// Check if client has object of type in in's queue
+bool ClientHasObjectType<T>(ushort index)
+
+// If client has valid type, pull the first occurence. If not, return 
+// default.
+T PullFromClient<T>(ushort index)
+
+// If client does not have type T, wait until it does and then pull the // first occurence.
+T WaitForPullFromClient<T>(ushort index)
+
+// Async version of WaitForPullFromClient
+Task<T>PullFromClientAsync<T>(ushort index)
+
+// Returns all objects in client queue. If clear, remove them from queue // as well.
+object[] GetClientQueueObjectsTypeless(ushort index, bool clear = false)
+
+// Returns all objects in client queue that are the specified type. If
+// clear, remove them from queue as well.
+T[] GetClientQueueTyped<T>(ushort index, bool clear = false)
+
+// Async versions of previous methods
+Task<object[]> GetClientQueueObjectsTypelessAsync(ushort index, bool clear = false)
+Task<T[]> GetClientQueueTypedAsync<T>(ushort index, bool clear = false)
+
+// Clears queue of specific client
+ClearClientQueue(ushort index)
+
+// Clears queue of all clients
+ClearAllQueue()
+
+// Disconencts client with default disconnection context
+DisconnectClient(ushort index, bool remove = false)
+
+// Disconnects client with chosen context
+DisconnectClient(ushort index, DisconnectionContext ctx, bool remove = false)
+
+// Disconencts all clients. If remove is set to true, their information // can no longer be accessed.
+DisconnectAllClients(bool remove = false)
+
+// Disconencts all clients with chosen context. If remove is set to true, their information // can no longer be accessed.
+DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
+~~~
+
+##### Properties/Fields
+~~~
+// Gets or sets the time between calls to manage clients. Only applicable // when GlobalDefaults.RunServerClientsOnOneThread == true
+int ClientUpdateWaitTime
+
+// Gets the amount of clients the server is managing
+ushort ClientCount
+
+// Gets if the server is currently accepting connections
+bool Running
+
+// Tells the server to restart automatically when client count drops 
+// below max
+bool RestartAutomatically
+
+// Indexible class that returns a client model object.
+ClientAccessor ReadonlyClients
+~~~
+
+##### Delegates/Events
+~~~
+// Provides the disconnection context and the conenction info of the
+// client that disconnected
+delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf)
+
+// Provides the client info of the client that connected
+delegate void ClientConnected(ConnectionInfo inf)
+
+// Provides the path of the file and the connection info who recieved the
+// file
+delegate void RecievedFile(string path, ConnectionInfo info)
+
+// Invoked when a client disconnects
+event ClientDisconnected OnClientDisconnect
+
+// Invoked when a client connects
+event ClientConnected OnClientConnect
+
+// Invoked when a client recieves a file
+event RecievedFile OnClientRecieveFile
+~~~
+
+##### Subclasses
+~~~
+// Indexible class for accessing ClientModels
+Server.ClientAccessor
+
+// Some readonly information about a client
+Server.ClientAccessor.ClientModel
+	ConnectionInfo Info;
+	bool IsConnected;
+	int QueuedObjectCount;
+~~~
+
+### Client
 -- Connects to a server, sends and recieves data with server.
-* ConnectionInfo
--- Information about a given connection such as IP Address and port number.
-* DisconnectionContext
--- Class sent over sockets when disconnect is called. Manages what the remote device does when disconnected from.
-* GlobalDefaults
--- Static class that manages the default settings used by SimpleNetwork, such as wheather to use JSON or MESSAGEPACK or how an ungraceful disconnect is handled.
-* ClientModel
--- Models a client and has a good amount of a specified client's information. Used to get information about a client from the server.
-* ClientAccessor
--- Class that manages getting of ClientModel by index.
 
-##### Server properties
+##### Constructor
+~~~
+new Client();
+~~~
+##### Work with data
 
-* int UpdateClientWaitTime 
--- Get or set the time in milliseconds the client waits in between recieve calls.
-* ushort MaxClients
--- Gets the maximum amount of clients the server can manage at a time.
-* ushort ClientCount
--- Gets the amount of clients that the server is currently managing. This includes clients that have disconnected, but are set to stay.
-* bool Running
---Gets the boolean value of the server running.
-* public bool RestartAutomatically
--- Gets or sets the boolean value for the server to automatically start accepting clients after one has been disconnected and removed.
-* ReadonlyClients
--- ClientAccessor object that returns ClientModel object based on client index.
+~~~
+// Sends a c# object over the network
+SendObject<T>(T obj)
 
-##### Server events
-* OnClientDisconnect
--- Invoked whenever a client disconnects, passes a DisconnectionContext object as well as a ConnectionInfo object to it's subscribers.
-* OnClientConnect
--- Invoked whenever a client connects, passes a ConnectionInfo object to it's subscribers.
+// Sends a file over the network. If name is provided, sends the file 
+// with the new name.
+SendFile(string path, string name = null)
 
-##### Server methods
-* StartServer()
--- Starts accepting connections on the server.
-* StopServer()
--- Manually stops server from accepting connections.
-* SendToAll<T>(T obj)
--- Sends an object to all clients on the server.
-* Close()
--- Stops the server, disconnects all clients and removes them. Essentially terminates the server.
-* SendToOne<T>(T obj, ushort index)
--- Sends an object to a client at the specified index.
-* bool ClientHasObjectType<T>(ushort index)
--- Checks if client at index has a certain object type.
-* T PullFromClient<T>(ushort index)
--- Tries to pull an object from client at specified index. If the client does not have that specified object type,returns default.
-* T WaitForPullFromClient<T>(ushort index)
--- Waits until the client has the specified object type. Once it does, returns the object.
-* ClearDisconnectedClients()
--- Removes all of the clients that have been disconnected from.
-* DisconnectClient(ushort index, bool remove = false)
---Disconnects a client at a givin index. If remove is set to true, the client gets removed. Otherwise, the client is kept until it's queue is empty.
-* DisconnectClient(ushort index, DisconnectionContext ctx, bool remove = false)
--- Overload of DisconnectClient that allows you to specify DisconnectionContext.
-* DisconnectAllClients(bool remove = false)
--- Disconnects all of the clients. If set to remove, removes the clients as well.
-* DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
--- Overload of DisconnectAllClients that allows user to specify disconnection context.
+// If there isn't an object of specific type in the queue, return 
+// default. Otherwise, return the first occurence of that type.
+T PullObject<T>()
 
-##### Server constructors
-* Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
--- Creates a server that listens on iPAddress to port PortNum where MaxClients can connect to it.
-* Server(string iPAddress, int PortNum, ushort MaxClients)
--- Same as other constructor, only uses string address and throws an exception if invalid.
-##### Client properties
+// Waits until target type is in queue. once it is, return the first 
+// occurence
+T WaitForPullObject<T>()
 
-* int UpdateWaitTime 
--- Get or set the time in milliseconds the client waits in between recieve calls.
-* int QueuedObjectCount
--- Gets the amount of ovjects in the object's queue.
-* ConnectionInfo connectionInfo
--- Returns the client's connection info.
-* bool Running
--- Checks if the management loop is executing
-* bool IsConnected
--- Checks if the client is connected
+// Check if T object is in the queue
+HasObjectType<T>()
 
-##### Client Events
-* OnDisconnect
--- Invoked whenever a client disconnects. Passes DisconnectionContext and ConnectionInfo to subscribers.
-* OnConnect
--- Invoked whenever BeginConnect finishes. Passes ConnectionInfo to subscribers.
+// Gets the entire queue. If set to clear, also clears the internal queue
+object[] GetQueueObjectsTypeless(bool clear = false)
 
-##### Client Methods
+// Gets all instances of t from the queue. If set to clear, removes them
+// from the queue.
+T[] GetQueueObjectsTyped<T>(bool clear = false)
 
-* Connect(IPAddress address, int port)
--- Connects to server hosted on address and port
-* Connect(String address, int port)
--- Overload of connect allows you to pass a string for address, throws exception if invalid.
-* BeginConnect(IPAddress address, int port)
--- Begins connecting to server asynchronously. Invokes OnConnect.
-* BeginConnect(string address, int port)
--- Overload of BeginConnect that uses a string as address, throws an exception if invalid.
-* CancelConnect()
--- Cancels BeginConnect if not already connected.
-* Disconnect()
--- Disconnects from the server.
-* Disconnect(DisconnectionContext ctx)
--- Overload of Disconnect that allows the user to pass DisconnectionContext.
-* Clear()
--- Disconnects from server and clears the queue.
-* SendObject<T>(T obj)
--- Sends an object to the server.
-* T PullObject<T>()
--- Tries to pull an object from client. If the client does not have that specified object type, returns default.
-* T WaitForPullObject<T>()
--- Waits until the client has specified object type and returns the first occurence of it.
-* bool HasObjectType<T>()
--- Checks if client has specified object type.
+// Async versions of previous methods where applicable.
+Task SendObjectAsync<T>(T obj)
+SendFileAsync(string path, string name = null)
+Task<T> PullObjectAsync<T>()
+Task<object[]> GetQueueObjectsTypelessAsync(bool clear = false)
+Task<T[]> GetQueueObjectsTypedAsync<T>(bool clear = false)
+~~~
+##### Connection management
 
-##### ConnectionInfo properties
+~~~
+// Connect to address at port. Waits until connection is successful.
+Connect(IPAddress address, int port)
+Connect(string address, int port)
 
-* IPAddress LocalAddress
--- Address of local machine.
-* string LocalHostName
--- Host name of local macine.
-* IPAddress RemotelAddress
--- Address of remote machine.
-* string RemoteHostName
--- Hostname of remote machine.
+// Connect to address at port. Starts connection on a new thread
+BeginConnect(IPAddress address, int port)
+BeginConnect(string address, int port)
 
-##### DisconnectionContext.DisconnectionType (enum)
+// Disconnects from server
+Disconnect()
 
-* CLOSE_CONNECTION
--- Closes connection but doesn't remove/clear it
-* REMOVE
--- Closes connection and removes/clears it
-* FORCIBLE
--- When the connection is ungraceful, GlobalDefaults.ForcibleDisconnectMode determines what happens.
+// Disconnects from server, allows user to specify DisconnectionContext
+Disconnect(DisconnectionContext ctx)
 
-##### DisconnectionContext properties
-* DisconnectionType type
--- disconnection type
+// Clears the queue and terminates the connection.
+Clear()
 
-##### GlobalDefaults
-Static class that manages several default values. If you want to use different defaults, set them before you run any other simplenet code. If you change them in the middle of normal opperations, systems will not work correctly.
+// Clears the queue
+ClearQueue()
 
-##### GlobalDefaults.ForcibleDisconnectBehavior (enum)
-* REMOVE
--- When there is a forcible disconnection, clears client.
-* KEEP
--- When there is a forcible disconnection, keeps client.
+// Async connection methods
+Task ConnectAsync(IPAddress address, int port)
+Task ConnectAsync(string address, int port)
+~~~
 
-##### GlobalDefaults.EncodingType
-* JSON
--- Slower encoding that takes up more memory, but more classes work with it.
-* MESSAGE_PACK
--- Faster and more compact encoding that 
+##### Properties/Fields
+~~~
+// Time in between recieve calls and beginConnect attempts 
+int UpdateWaitTime
 
-##### GlobalDefaults.RunServerClientsOnOneThread(bool)
-When connecting a massive amount of clients, set to true in order to use one thread for all of the clients server-side. Does not affect client normaly.
+// How many objects are in the queue
+int QueuedObjectCount
+
+// Client connection information
+ConnectionInfo connectionInfo
+
+// Check if client is running
+bool Running
+
+// Check if client is connected
+bool IsConnected
+
+// If not disconencted, null. otherwise the disconnection context
+DisconnectionContext DisconnectionMode
+~~~
+
+##### Delegates/Events
+~~~
+// Provides disconnection context and info
+delegate void Disconnected(DisconnectionContext ctx, ConnectionInfo inf)
+
+// Provides file path
+delegate void RecievedFile(string path)
+
+// Provides ConnectionInfo
+delegate void Connected(ConnectionInfo inf)
+
+// Invoked when disconnected from
+event Disconnected OnDisconnect
+
+// Invoked when begincoinnect is successful
+event Connected OnConnect
+
+// Invoked when client recievs a file
+event RecievedFile OnFileRecieve
+~~~
+
+### GlobalDefaults
+-- Static class containing several miscelaneous properties, fields, and methods that control connection behaviors
+
+##### Enums
+~~~
+public enum ForcibleDisconnectBehavior
+{
+	REMOVE,
+	KEEP
+}
+public enum EncodingType
+{
+	JSON,
+	MESSAGE_PACK
+}
+~~~
+
+##### Methods
+~~~
+// clears all files recieved by simple net
+ClearSentFiles()
+~~~
+
+##### Fields/Properties
+~~~
+// Determines weather the server will keep or remove a client that was
+// forcibly disconnected. By default KEEP
+ForcibleDisconnectBehavior ForcibleDisconnectMode
+
+// Choses wheather to use JSON or Message pack as encoding type. Must be
+// same for server and client endpoints. By default MESSAGE_PACK
+EncodingType ObjectEncodingType
+
+// Determines if the server will manage client operations on one thread
+// or if each client gets it's own thread. By default true
+bool RunServerClientsOnOneThread
+
+// If true, client will only keep the latest object ofe each type
+// recieved. By default false
+bool OverwritePreviousOfTypeInQueue
+
+// Determines whether the network uses encryption. Must be the same on
+// client and server. By default true
+bool UseEncryption
+
+// Use this if you want to use a custom messagepack serializer.
+MessagePackSerializerOptions Serializer
+
+// Path where recieved files are stored. By default directory of running
+// running project + \SentFiles
+string FileDirectory
+~~~
+
+### DisconnectionContext
+-- Sent whenever disconnected, informs the endpoint of disconnection type
+
+##### Enums
+~~~
+public enum DisconnectionType
+{
+	CLOSE_CONNECTION,
+	REMOVE,
+	FORCIBLE
+}
+~~~
+
+##### Properties/Fields
+~~~
+// Specifies if its simply closing the conenction, removing the client or
+// if it was disconnected by outside circumstances
+DisconnectionType type
+~~~
+
+### ConnectionInfo
+-- Has information about a connection
+
+##### Properties/Fields
+~~~
+// Local IP Address
+IPAddress LocalAddress
+
+// Local host name
+string LocalHostName
+
+// Remote IP Address
+IPAddress RemoteAddress
+
+// Remote host name
+string RemoteHostName
+~~~

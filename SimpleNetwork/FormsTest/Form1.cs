@@ -4,6 +4,7 @@ using System.Net;
 using System.Windows.Forms;
 using SimpleNetwork;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace FormsTest
 {
@@ -15,33 +16,87 @@ namespace FormsTest
         {
             InitializeComponent();
             GlobalDefaults.ObjectEncodingType = GlobalDefaults.EncodingType.MESSAGE_PACK;
+            GlobalDefaults.RunServerClientsOnOneThread = false;
             s = new Server(IPAddress.Parse("192.168.0.17"), 9573, 1);
             s.RestartAutomatically = true;
             s.StartServer();
-            s.OnClientConnect += S_OnClientConnect;
+            s.OnClientRecieveFile += S_OnClientRecieveFile;
+            //s.OnClientConnect += S_OnClientConnect;
         }
 
-        private void S_OnClientConnect(ConnectionInfo inf)
+        private void S_OnClientRecieveFile(string path, ConnectionInfo info)
         {
-            pictureBox1.Image = GetBitmap(s.WaitForPullFromClient<color[,]>((ushort)(s.ClientCount - 1)));
+            //pictureBox1.Image = Bitmap.FromFile(path);
             MessageBox.Show(((float)sw.ElapsedMilliseconds / 1000).ToString());
-            sw.Stop();
             sw.Reset();
-            MessageBox.Show(s.WaitForPullFromClient<string>((ushort)(s.ClientCount - 1)));
+
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        //private void S_OnClientConnect(ConnectionInfo inf)
+        //{
+        //    Task.Run(() =>
+        //        {
+        //            pictureBox1.Image = GetBitmap(s.WaitForPullFromClient<color[,]>((ushort)(s.ClientCount - 1)));
+        //            MessageBox.Show(((float)sw.ElapsedMilliseconds / 1000).ToString());
+        //            sw.Stop();
+        //            sw.Reset();
+        //        }
+        //    );
+
+        //    //MessageBox.Show(s.WaitForPullFromClient<string>((ushort)(s.ClientCount - 1)));
+        //}
+
+        private async void button1_Click(object sender, EventArgs e)
+        {
+            //await Task.Run(() => SendFile());
+            await SendFileAsync();
+        }
+
+        void ree()
         {
             s.ClearDisconnectedClients();
             OpenFileDialog ofd = new OpenFileDialog();
-            ofd.ShowDialog();
+            Invoke(new MethodInvoker(() => ofd.ShowDialog()));
             Bitmap bmp = (Bitmap)Image.FromFile(ofd.FileName);
             Client c = new Client();
             c.Connect(IPAddress.Parse("192.168.0.17"), 9573);
             color[,] colorMen = GetPixels(bmp);
             sw.Start();
             c.SendObject<color[,]>(colorMen);
-            c.SendObject("HALOOOOO");
+            c.Disconnect();
+        }
+
+        async Task SendFileAsync()
+        {
+            s.ClearDisconnectedClients();
+            OpenFileDialog ofd = new OpenFileDialog();
+            Invoke(new MethodInvoker(() => ofd.ShowDialog()));
+            Client c = new Client();
+            c.Connect(IPAddress.Parse("192.168.0.17"), 9573);
+            sw.Start();
+            await c.SendFileAsync(ofd.FileName).ConfigureAwait(false);
+            c.Disconnect();
+        }
+        async Task SendFileAsync2()
+        {
+            s.ClearDisconnectedClients();
+            OpenFileDialog ofd = new OpenFileDialog();
+            Invoke(new MethodInvoker(() => ofd.ShowDialog()));
+            Client c = new Client();
+            c.Connect(IPAddress.Parse("192.168.0.17"), 9573);
+            sw.Start();
+            await Task.Run(() => c.SendFile(ofd.FileName));
+            c.Disconnect();
+        }
+        void SendFile()
+        {
+            s.ClearDisconnectedClients();
+            OpenFileDialog ofd = new OpenFileDialog();
+            Invoke(new MethodInvoker(() => ofd.ShowDialog()));
+            Client c = new Client();
+            c.Connect(IPAddress.Parse("192.168.0.17"), 9573);
+            sw.Start();
+            c.SendFile(ofd.FileName);
             c.Disconnect();
         }
 

@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace SimpleNetwork
 {
@@ -15,7 +16,7 @@ namespace SimpleNetwork
         private Socket ServerSocket;
         private List<Client> Clients = new List<Client>();
 
-        public int UpdateClientWaitTime = 1000;
+        public int UpdateClientWaitTime = 150;
         public readonly ushort MaxClients;
 
         public ushort ClientCount => (ushort)Clients.Count;
@@ -23,10 +24,12 @@ namespace SimpleNetwork
         public bool RestartAutomatically = false;
 
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
-        public event ClientDisconnected OnClientDisconnect;
-
         public delegate void ClientConnected(ConnectionInfo inf);
+        public delegate void RecievedFile(string path, ConnectionInfo info);
+
+        public event ClientDisconnected OnClientDisconnect;
         public event ClientConnected OnClientConnect;
+        public event RecievedFile OnClientRecieveFile;
 
         public ClientAccessor ReadonlyClients;
 
@@ -86,6 +89,7 @@ namespace SimpleNetwork
                             {
                                 Clients.Add(c);
                                 c.OnDisconnect += ClientDisconnect;
+                                c.OnServerRecieve += ServerFileRecieve;
                                 c.UpdateWaitTime = UpdateClientWaitTime;
                             }                                
                             else
@@ -106,6 +110,7 @@ namespace SimpleNetwork
                 ServerSocket.Close();
                 ServerSocket = null;
             });
+            clientAcceptor.IsBackground = true;
             clientAcceptor.Start();
 
             Running = true;
@@ -116,6 +121,8 @@ namespace SimpleNetwork
                 {
                     ManagementLoop();
                 });
+
+                BackgroundWorker.IsBackground = true;
                 BackgroundWorker.Start();
             }
         }
@@ -129,7 +136,7 @@ namespace SimpleNetwork
             ServerSocket?.Close();
         }
 
-        /// <summary>
+         /// <summary>
         /// Closes the server, disconnects and clears all clients
         /// </summary>
         public void Close()
@@ -149,13 +156,34 @@ namespace SimpleNetwork
         /// <param name="obj">Object to send</param>
         public void SendToAll<T>(T obj)
         {
-            lock (LockObject)
+            WaitForPendingConnections();
+            for (int i = 0; i < ClientCount; i++)
             {
-                WaitForPendingConnections();
-                for (int i = 0; i < ClientCount; i++)
-                {
+                while (GlobalDefaults.UseEncryption && !Clients[i].RecivedKey) ;
+                lock (LockObject)
                     Clients[i].SendObject(obj);
-                }
+            }
+        }
+
+        public async Task SendToAllAsync<T>(T obj)
+        {
+            List<Task> tasks = new List<Task>();
+
+            WaitForPendingConnections();
+            for (int i = 0; i < ClientCount; i++)
+            {
+                if (GlobalDefaults.UseEncryption)
+                    await Task.Run(() =>
+                    {
+                        while (GlobalDefaults.UseEncryption && !Clients[i].RecivedKey) ;
+                    });
+                lock (LockObject)
+                    tasks.Add(Clients[i].SendObjectAsync(obj));
+            }
+
+            foreach (Task t in tasks)
+            {
+                await t;
             }
         }
 
@@ -167,7 +195,68 @@ namespace SimpleNetwork
         /// <param name="index">Index of the client</param>
         public void SendToOne<T>(T obj, ushort index)
         {
+            while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
             Clients[index].SendObject(obj);
+        }
+
+        public async Task SendToOneAsync<T>(T obj, ushort index)
+        {
+            await Task.Run(() =>
+            {
+                while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
+            });
+            await Clients[index].SendObjectAsync(obj);
+        }
+
+        public void SendFileToAll(string path, string name = null)
+        {
+            WaitForPendingConnections();
+            for (int i = 0; i < ClientCount; i++)
+            {
+                while (GlobalDefaults.UseEncryption && !Clients[i].RecivedKey) ;
+                lock (LockObject)
+                    Clients[i].SendFile(path, name);
+            }
+        }
+
+        public async Task SendFileToAllAsync(string path, string name = null)
+        {
+            List<Task> tasks = new List<Task>();
+
+            WaitForPendingConnections();
+            for (int i = 0; i < ClientCount; i++)
+            {
+                await Task.Run(() =>
+                {
+                    while (GlobalDefaults.UseEncryption && !Clients[i].RecivedKey) ;
+                });
+                lock (LockObject)
+                tasks.Add(Clients[i].SendFileAsync(path, name));
+            }
+
+            foreach (Task t in tasks)
+            {
+                await t;
+            }
+        }
+
+        public void SendFileToOne(string path, ushort index, string name = null)
+        {
+            while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
+            lock (LockObject)
+                Clients[index].SendFile(path, name);
+        }
+
+        public async Task SendFileToOneAsync(string path, ushort index, string name = null)
+        {
+            await Task.Run(() =>
+            {
+                while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
+            });
+            Task tsk = null;
+            lock (LockObject)
+                tsk =  Clients[index].SendFileAsync(path, name);
+            await tsk;
         }
 
         /// <summary>
@@ -204,6 +293,11 @@ namespace SimpleNetwork
             return Clients[index].WaitForPullObject<T>();
         }
 
+        public async Task<T> PullFromClientAsync<T>(ushort index)
+        {
+            return await Clients[index].PullObjectAsync<T>();
+        }
+
         public object[] GetClientQueueObjectsTypeless(ushort index, bool clear = false)
         {
             object[] obs;
@@ -222,6 +316,27 @@ namespace SimpleNetwork
                 obs = Clients[index].GetQueueObjectsTyped<T>(clear);
             }
             return obs;
+        }
+
+        public async Task<object[]> GetClientQueueObjectsTypelessAsync(ushort index, bool clear = false)
+        {
+            object[] obs;
+            Task<object[]> tsk = null;
+            lock (LockObject)
+            {
+                tsk = Clients[index].GetQueueObjectsTypelessAsync(clear);
+            }
+            return await tsk;
+        }
+
+        public async Task<T[]> GetClientQueueTypedAsync<T>(ushort index, bool clear = false)
+        {
+            Task<T[]> tsk = null;
+            lock (LockObject)
+            {
+                tsk = Clients[index].GetQueueObjectsTypedAsync<T>(clear);
+            }
+            return await tsk;
         }
 
         /// <summary>
@@ -274,7 +389,9 @@ namespace SimpleNetwork
             Clients[index].Disconnect();
             if (remove)
             {
+                while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
                 lock (LockObject)
+                    lock (LockObject)
                 {
                     Clients.RemoveAt(index);
                     if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
@@ -293,7 +410,9 @@ namespace SimpleNetwork
             Clients[index].Disconnect(ctx);
             if (remove)
             {
+                while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
                 lock (LockObject)
+                    lock (LockObject)
                 {
                     Clients.RemoveAt(index);
                     if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
@@ -312,9 +431,10 @@ namespace SimpleNetwork
 
         public void DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
         {
-            lock (LockObject)
+            for (int i = 0; i < ClientCount; i++)
             {
-                for (int i = 0; i < ClientCount; i++)
+                while (GlobalDefaults.UseEncryption && !Clients[i].RecivedKey) ;
+                lock (LockObject)
                 {
                     Clients[i].Disconnect(ctx);
                     if (remove)
@@ -354,7 +474,7 @@ namespace SimpleNetwork
             {
                 for (int i = 0; i < ClientCount; i++)
                 {
-                    if (Clients[i].IsConnected) continue;
+                    if (!Clients[i].connectionInfo.Equals(inf)) continue;
                     if (Clients[i].DisconnectionMode.type == DisconnectionContext.DisconnectionType.REMOVE)
                     {
                         Clients.RemoveAt(i);
@@ -370,6 +490,11 @@ namespace SimpleNetwork
                 OnClientDisconnect?.Invoke(ctx, inf);
             }
             if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
+        }
+
+        private void ServerFileRecieve(string path, ConnectionInfo info)
+        {
+            OnClientRecieveFile?.Invoke(path, info);
         }
 
         public class ClientAccessor
