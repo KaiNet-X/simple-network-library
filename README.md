@@ -1,4 +1,4 @@
-# simple-network-library
+# simple network
 SimpleNetwork is a .NET standard library that is compatible with most poject types that greatly simplifies the process of networking. 
 
 Simple net allows you to start and initialize a flexible tcp server in as little as two lines. It contains two main classes, client and server, each that are easy to get connected and sending information between them.
