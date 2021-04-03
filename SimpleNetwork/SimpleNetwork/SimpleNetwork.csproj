@@ -2,14 +2,14 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
-    <Description>Library for easy, flexible networking. Send and recieve any object in as little as six lines. Works straight out of the box, and many options to control the network and methods to access it</Description>
+    <Description>Provides easy to use networking. Send and recieve any c# object or file in as little as six lines. Works straight out-of-the-box. Many ways to configure and get more granular control making it easy to use in any project type.</Description>
     <Authors>Kai</Authors>
     <Company>KaiNet</Company>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/KaiNet-X/simple-network-library</RepositoryUrl>
-    <PackageTags>socket, sockets, network, networking, tcp, network</PackageTags>
+    <PackageTags>socket, sockets, network, networking, tcp, net, web</PackageTags>
     <PackageId>KaiNet.SimpleNetwork</PackageId>
-    <Version>1.1.2</Version>
+    <Version>1.2.0</Version>
     <FileUpgradeFlags>40</FileUpgradeFlags>
     <UpgradeBackupLocation>C:\Users\Kai\source\repos\SimpleNetwork\Backup\SimpleNetwork\</UpgradeBackupLocation>
     <OldToolsVersion>2.0</OldToolsVersion>
@@ -18,7 +18,7 @@
     <Optimize>false</Optimize>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="MessagePack" Version="2.2.60" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="MessagePack" Version="2.2.85" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
   </ItemGroup>
 </Project>

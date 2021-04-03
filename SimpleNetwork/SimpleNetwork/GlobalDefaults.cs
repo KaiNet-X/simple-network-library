@@ -4,18 +4,18 @@ namespace SimpleNetwork
 {
     public static class GlobalDefaults
     {
-        public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.REMOVE;
-        public static EncodingType ObjectEncodingType = EncodingType.JSON;
+        public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.KEEP;
+        public static EncodingType ObjectEncodingType = EncodingType.MESSAGE_PACK;
         public static bool RunServerClientsOnOneThread = true;
         public static bool OverwritePreviousOfTypeInQueue = false;
         public static bool UseEncryption = true;
-        public static MessagePack.MessagePackSerializerOptions Serializer = MessagePack.Resolvers.ContractlessStandardResolver.Options;
-        public static string FilePath = "\\Temp\\";
+        public static MessagePack.MessagePackSerializerOptions SerializerOptions = MessagePack.Resolvers.ContractlessStandardResolver.Options;
         public static string FileDirectory { get; set; } = Directory.GetCurrentDirectory() + "\\SentFiles";
 
         public static void ClearSentFiles()
         {
-            Directory.Delete(FileDirectory, true);
+            if (Directory.Exists(FileDirectory))
+                Directory.Delete(FileDirectory, true);
         }
 
         public enum ForcibleDisconnectBehavior

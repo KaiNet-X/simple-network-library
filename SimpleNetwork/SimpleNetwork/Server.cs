@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -16,7 +18,7 @@ namespace SimpleNetwork
         private Socket ServerSocket;
         private List<Client> Clients = new List<Client>();
 
-        public int UpdateClientWaitTime = 150;
+        public int ClientUpdateWaitTime = 150;
         public readonly ushort MaxClients;
 
         public ushort ClientCount => (ushort)Clients.Count;
@@ -24,12 +26,14 @@ namespace SimpleNetwork
         public bool RestartAutomatically = false;
 
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
-        public delegate void ClientConnected(ConnectionInfo inf);
+        public delegate void ClientConnected(ConnectionInfo inf, ushort index);
         public delegate void RecievedFile(string path, ConnectionInfo info);
+        public delegate void RecievedObject(object obj, Type type, ConnectionInfo info);
 
         public event ClientDisconnected OnClientDisconnect;
         public event ClientConnected OnClientConnect;
         public event RecievedFile OnClientRecieveFile;
+        public event RecievedObject OnClientRecieveObject;
 
         public ClientAccessor ReadonlyClients;
 
@@ -44,30 +48,23 @@ namespace SimpleNetwork
             Address = iPAddress;
             Port = PortNum;
             this.MaxClients = MaxClients;
-            ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            ServerSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+            ServerSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
 
             ReadonlyClients = new ClientAccessor(Clients);
         }
 
-        public Server(string iPAddress, int PortNum, ushort MaxClients)
+        public Server(string iPAddress, int PortNum, ushort MaxClients) : this(IPAddress.Parse(iPAddress), PortNum, MaxClients)
         {
-            Address = IPAddress.Parse(iPAddress);
-            Port = PortNum;
-            this.MaxClients = MaxClients;
-            ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-
-            ReadonlyClients = new ClientAccessor(Clients);
+            
         }
 
-
-        /// <summary>
-        /// Enables the server to connect clients
-        /// </summary>
         public void StartServer()
         {
             if (ServerSocket == null)
             {
-                ServerSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                ServerSocket = new Socket(AddressFamily.InterNetworkV6, SocketType.Stream, ProtocolType.Tcp);
+                ServerSocket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.IPv6Only, false);
             }
             Thread clientAcceptor = new Thread(() =>
             {
@@ -89,16 +86,21 @@ namespace SimpleNetwork
                             {
                                 Clients.Add(c);
                                 c.OnDisconnect += ClientDisconnect;
-                                c.OnServerRecieve += ServerFileRecieve;
-                                c.UpdateWaitTime = UpdateClientWaitTime;
+
+                                if (OnClientRecieveFile != null)
+                                    c.OnFileRecieve += (string path) => OnClientRecieveFile.Invoke(path, c.connectionInfo);
+                                if (OnClientRecieveObject != null)
+                                    c.OnRecieveObject += (object obj, Type type) => OnClientRecieveObject?.Invoke(obj, type, c.connectionInfo);
+
+                                c.UpdateWaitTime = ClientUpdateWaitTime;
                             }                                
                             else
                                 c.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
-                        }
-                        ConnectingClient = false;
-                        if (c.IsConnected)
-                            OnClientConnect?.Invoke(c.connectionInfo);
 
+                            ConnectingClient = false;
+                            if (c.IsConnected)
+                                OnClientConnect?.Invoke(c.connectionInfo, (ushort)(ClientCount - 1));
+                        }
                     }
                     catch (SocketException)
                     {
@@ -127,18 +129,13 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// Stops connecting clients
-        /// </summary>
         public void StopServer()
         {
             Running = false;
+            RestartAutomatically = false;
             ServerSocket?.Close();
         }
 
-         /// <summary>
-        /// Closes the server, disconnects and clears all clients
-        /// </summary>
         public void Close()
         {
             Running = false;
@@ -149,11 +146,6 @@ namespace SimpleNetwork
 
         #region clientAccess
 
-        /// <summary>
-        /// Sends Object t to all clients
-        /// </summary>
-        /// <typeparam name="T">Object type</typeparam>
-        /// <param name="obj">Object to send</param>
         public void SendToAll<T>(T obj)
         {
             WaitForPendingConnections();
@@ -187,12 +179,6 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// Sends an object T to a specific client based on index
-        /// </summary>
-        /// <typeparam name="T">Type of object</typeparam>
-        /// <param name="obj">Object to send</param>
-        /// <param name="index">Index of the client</param>
         public void SendToOne<T>(T obj, ushort index)
         {
             while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
@@ -259,35 +245,16 @@ namespace SimpleNetwork
             await tsk;
         }
 
-        /// <summary>
-        /// Checks if a client's queue cotains object of type T
-        /// </summary>
-        /// <typeparam name="T">Type of object to look for</typeparam>
-        /// <param name="index">Index of client to check</param>
-        /// <returns></returns>
         public bool ClientHasObjectType<T>(ushort index)
         {
             return Clients[index].HasObjectType<T>();
         }
 
-        /// <summary>
-        /// Pulls an object T from client. 
-        /// If the client does not contain an object of this type, returns default
-        /// </summary>
-        /// <typeparam name="T">Pulls an object(T) from the client</typeparam>
-        /// <param name="index">index of client to pull from</param>
-        /// <returns></returns>
         public T PullFromClient<T>(ushort index)
         {
             return Clients[index].PullObject<T>();
         }
 
-        /// <summary>
-        /// Pulls an object from a client. Waits until object of specified type is availible before returning.
-        /// </summary>
-        /// <typeparam name="T">Specified object type</typeparam>
-        /// <param name="index">index of client to search for</param>
-        /// <returns></returns>
         public T WaitForPullFromClient<T>(ushort index)
         {
             return Clients[index].WaitForPullObject<T>();
@@ -339,9 +306,6 @@ namespace SimpleNetwork
             return await tsk;
         }
 
-        /// <summary>
-        /// clears all of the disconnected cients
-        /// </summary>
         public void ClearDisconnectedClients()
         {
             lock (LockObject)
@@ -358,18 +322,11 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// Clears the queue of one client
-        /// </summary>
-        /// <param name="index"></param>
         public void ClearClientQueue(ushort index) 
         {
             Clients[index].ClearQueue();
         }
 
-        /// <summary>
-        /// Clears the queues of all clients
-        /// </summary>
         public void ClearAllQueue()
         {
             lock(LockObject)
@@ -379,11 +336,6 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// Disconnects client at index
-        /// </summary>
-        /// <param name="index">index of client</param>
-        /// <param name="remove">specifies whether the client will be removed</param>
         public void DisconnectClient(ushort index, bool remove = false)
         {
             Clients[index].Disconnect();
@@ -399,12 +351,6 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// Disconnects a client while allowing you to specify disconnection context
-        /// </summary>
-        /// <param name="index">idex of client to disconnect</param>
-        /// <param name="ctx">disconnection context to tell remote client how to handle disconnection</param>
-        /// <param name="remove">specifies whether to remove the client</param>
         public void DisconnectClient(ushort index, DisconnectionContext ctx, bool remove = false)
         {
             Clients[index].Disconnect(ctx);
@@ -420,13 +366,9 @@ namespace SimpleNetwork
             }
         }
 
-        /// <summary>
-        /// disconnects all clients
-        /// </summary>
-        /// <param name="remove">specifies whether to remove the clients</param>
         public void DisconnectAllClients(bool remove = false)
         {
-            DisconnectAllClients(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.CLOSE_CONNECTION }, remove);
+            DisconnectAllClients(new DisconnectionContext (), remove);
         }
 
         public void DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
@@ -464,7 +406,7 @@ namespace SimpleNetwork
                     {
                         Clients[i].Manage();
                     }
-                Thread.Sleep(UpdateClientWaitTime);
+                Thread.Sleep(ClientUpdateWaitTime);
             }
         }
 
@@ -492,14 +434,10 @@ namespace SimpleNetwork
             if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
         }
 
-        private void ServerFileRecieve(string path, ConnectionInfo info)
-        {
-            OnClientRecieveFile?.Invoke(path, info);
-        }
-
-        public class ClientAccessor
+        public class ClientAccessor : IEnumerable<ClientAccessor.ClientModel>
         {
             private readonly List<Client> Clients;
+
             internal ClientAccessor(List<Client> clients)
             {
                 Clients = clients;
@@ -514,6 +452,21 @@ namespace SimpleNetwork
                     int count = Clients[index].QueuedObjectCount;
                     return new ClientModel(inf, con, count);
                 }
+            }
+
+            public IEnumerator<ClientModel> GetEnumerator()
+            {
+                List<ClientModel> ac = new List<ClientModel>();
+                for (int i = 0; i < Clients.Count; i++)
+                {
+                    ac.Add(this[i]);
+                }
+                return ac.GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
             }
 
             public class ClientModel

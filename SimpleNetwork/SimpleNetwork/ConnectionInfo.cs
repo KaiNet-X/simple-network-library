@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 
 namespace SimpleNetwork
 {
@@ -9,6 +10,8 @@ namespace SimpleNetwork
 
         public readonly IPAddress RemoteAddress;
         public readonly string RemoteHostName;
+
+        public Guid ID { get; } = Guid.NewGuid();
 
         internal ConnectionInfo(IPAddress localA, string localS, IPAddress remA, string remS)
         {
