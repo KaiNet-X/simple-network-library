@@ -4,8 +4,9 @@ namespace SimpleNetwork
 {
     public static class GlobalDefaults
     {
-        public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.KEEP;
+        public static ForcibleDisconnectBehavior ForcibleDisconnectMode = ForcibleDisconnectBehavior.REMOVE;
         public static EncodingType ObjectEncodingType = EncodingType.MESSAGE_PACK;
+        public static DisconnectionContext.DisconnectionType DefaultContext = DisconnectionContext.DisconnectionType.CLOSE_CONNECTION;
         public static bool RunServerClientsOnOneThread = true;
         public static bool OverwritePreviousOfTypeInQueue = false;
         public static bool UseEncryption = true;

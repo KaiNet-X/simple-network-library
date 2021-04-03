@@ -33,7 +33,7 @@ namespace SimpleNetwork
         public delegate void RecievedFile(string path);
         public delegate void Connected(ConnectionInfo inf);
         public delegate bool ConnectException(SocketException ex, uint attempts);
-        public delegate void RecievedObject(object obj, Type type);
+        public delegate void RecievedObject(object obj);
         //internal delegate void RecievedFileServer(string path, ConnectionInfo info);
 
         public event Disconnected OnDisconnect;
@@ -197,7 +197,7 @@ namespace SimpleNetwork
 
         public void Disconnect()
         {
-            Disconnect(new DisconnectionContext());
+            Disconnect(new DisconnectionContext(GlobalDefaults.DefaultContext));
         }
 
         public void Disconnect(DisconnectionContext ctx)
@@ -684,7 +684,7 @@ namespace SimpleNetwork
                                         }
                                     }
                                     if (OnRecieveObject == null) ObjectQueue.Add(ObjectParser.BytesToObject(content, type));
-                                    else OnRecieveObject.Invoke(ObjectParser.BytesToObject(content, type), type);
+                                    else OnRecieveObject.Invoke(ObjectParser.BytesToObject(content, type));
                                 }
                             }
                         }

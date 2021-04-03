@@ -28,7 +28,7 @@ namespace SimpleNetwork
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
         public delegate void ClientConnected(ConnectionInfo inf, ushort index);
         public delegate void RecievedFile(string path, ConnectionInfo info);
-        public delegate void RecievedObject(object obj, Type type, ConnectionInfo info);
+        public delegate void RecievedObject(object obj, ConnectionInfo info);
 
         public event ClientDisconnected OnClientDisconnect;
         public event ClientConnected OnClientConnect;
@@ -90,7 +90,7 @@ namespace SimpleNetwork
                                 if (OnClientRecieveFile != null)
                                     c.OnFileRecieve += (string path) => OnClientRecieveFile.Invoke(path, c.connectionInfo);
                                 if (OnClientRecieveObject != null)
-                                    c.OnRecieveObject += (object obj, Type type) => OnClientRecieveObject?.Invoke(obj, type, c.connectionInfo);
+                                    c.OnRecieveObject += (object obj) => OnClientRecieveObject?.Invoke(obj, c.connectionInfo);
 
                                 c.UpdateWaitTime = ClientUpdateWaitTime;
                             }                                
@@ -247,7 +247,16 @@ namespace SimpleNetwork
 
         public bool ClientHasObjectType<T>(ushort index)
         {
-            return Clients[index].HasObjectType<T>();
+            try
+            {
+                return Clients[index].HasObjectType<T>();
+            }
+            catch (AggregateException ex)
+            {
+                if (index < ClientCount)
+                    return false;
+                else throw ex;
+            }
         }
 
         public T PullFromClient<T>(ushort index)
