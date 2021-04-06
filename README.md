@@ -1,4 +1,4 @@
-# simple network
+# Simple network
 SimpleNetwork is a .NET standard library that is compatible with most poject types that greatly simplifies the process of networking. 
 
 Simple net allows you to start and initialize a flexible tcp server in as little as two lines. It contains two main classes, client and server, each that are easy to get connected and sending information between them.
@@ -205,12 +205,15 @@ ClientAccessor ReadonlyClients
 // client that disconnected
 delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf)
 
-// Provides the client info of the client that connected
-delegate void ClientConnected(ConnectionInfo inf)
+// Provides the client info of the client that connected and the index that it can be
+// accessed in the server
+delegate void ClientConnected(ConnectionInfo inf, ushort index)
 
-// Provides the path of the file and the connection info who recieved the
-// file
+// Provides the path of the file and the connection info who recieved the file
 delegate void RecievedFile(string path, ConnectionInfo info)
+
+// Provides the latest object and the conenctioninfo for the client that recieved it
+public delegate void RecievedObject(object obj, ConnectionInfo info)
 
 // Invoked when a client disconnects
 event ClientDisconnected OnClientDisconnect
@@ -220,6 +223,10 @@ event ClientConnected OnClientConnect
 
 // Invoked when a client recieves a file
 event RecievedFile OnClientRecieveFile
+
+// Invoked when a client recieves an object. If there are any listeners, objects are not
+// stored in the queue
+public event RecievedObject OnClientRecieveObject
 ~~~
 
 ##### Subclasses
@@ -336,6 +343,13 @@ delegate void RecievedFile(string path)
 // Provides ConnectionInfo
 delegate void Connected(ConnectionInfo inf)
 
+// Shows the exception and amount of attempts the client has tried to connect. 
+// If return true, keep trying to connect. Otherwise, stop
+delegate bool ConnectException(SocketException ex, uint attempts)
+
+// provides the object that the client has recieved
+delegate void RecievedObject(object obj)
+		
 // Invoked when disconnected from
 event Disconnected OnDisconnect
 
@@ -344,6 +358,14 @@ event Connected OnConnect
 
 // Invoked when client recievs a file
 event RecievedFile OnFileRecieve
+
+// Invokes when the client recieves an object. If there are any listeners, Objects are
+// not stored in queue
+event RecievedObject OnRecieveObject
+
+// Invoked when there is a socketexception durring a connect method. Only one listener 
+// allowed
+ConnectException OnConnectError
 ~~~
 
 ### GlobalDefaults
@@ -435,4 +457,7 @@ IPAddress RemoteAddress
 
 // Remote host name
 string RemoteHostName
+
+// Readonly identifyer for clients (use this for keeping track of clients server side)
+Guid ID
 ~~~
