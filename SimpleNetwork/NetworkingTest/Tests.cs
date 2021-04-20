@@ -109,7 +109,7 @@ namespace NetworkingTest
             TestDefaults.SetGlobalDefaults();
 
             Server S = TestDefaults.GetServer();
-            S.OnClientConnect += OnConnect;
+            S.OnClientConnect += S_OnClientConnect;
             S.StartServer();
 
             Client c = new Client();
@@ -290,6 +290,11 @@ namespace NetworkingTest
         private void C_OnFileRecieve(string path)
         {
             files++;
+        }
+
+        private void S_OnClientConnect(ConnectionInfo inf, ushort index)
+        {
+            Connections++;
         }
 
         private void OnConnect(ConnectionInfo inf)
