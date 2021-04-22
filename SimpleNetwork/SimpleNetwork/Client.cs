@@ -30,7 +30,7 @@ namespace SimpleNetwork
         public DisconnectionContext DisconnectionMode { get; private set; }
 
         public delegate void Disconnected(DisconnectionContext ctx, ConnectionInfo inf);
-        public delegate void RecievedFile(string path);
+        public delegate void RecievedFile(FileStream file);
         public delegate void Connected(ConnectionInfo inf);
         public delegate bool ConnectException(SocketException ex, uint attempts);
         public delegate void RecievedObject(object obj);
@@ -163,7 +163,7 @@ namespace SimpleNetwork
 
                         try
                         {
-                            OnConnect?.Invoke(connectionInfo);
+                            Task.Run(()=>OnConnect?.Invoke(connectionInfo));
                         }
                         catch
                         {
@@ -174,8 +174,15 @@ namespace SimpleNetwork
                     {
                         if (OnConnectError != null)
                         {
-                            if (!OnConnectError.Invoke(ex, attempts))
-                                return;
+                            try
+                            {
+                                if (!OnConnectError.Invoke(ex, attempts))
+                                    return;
+                            }
+                            catch
+                            {
+
+                            }
                             attempts++;
                         }
                     }
@@ -314,7 +321,8 @@ namespace SimpleNetwork
                         DisconnectedFrom(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.FORCIBLE });
                     }
                 }
-            await t.ConfigureAwait(false);
+            if (t != null)
+                await t.ConfigureAwait(false);
         }
 
         public void SendFile(string path, string name = null)
@@ -543,7 +551,6 @@ namespace SimpleNetwork
 
         #endregion
         #endregion
-        public List<byte> tester = new List<byte>();
         private IEnumerator<object> RecieveCoroutine()
         {
             while (IsConnected)
@@ -574,7 +581,6 @@ namespace SimpleNetwork
                         Buffer = new byte[Connection.Available];
 
                         Connection.Receive(Buffer);
-                        tester.AddRange(Buffer);
                     }
                     catch (SocketException ex)
                     {
@@ -633,23 +639,26 @@ namespace SimpleNetwork
                         {
                             long length = 0;
                             string dir = GlobalDefaults.FileDirectory;
-                            FileStream fs;
 
                             if (!Directory.Exists(dir))
                                 Directory.CreateDirectory(dir);
-                            if (!File.Exists($@"{dir}\{item.fileInfo.Name}"))
-                                fs = File.Create($@"{dir}\{item.fileInfo.Name}");
-                            else
-                                fs = new FileStream($@"{dir}\{item.fileInfo.Name}", FileMode.Append);
 
-                            fs.Write(content, 0, content.Length);
-                            fs.Flush();
-                            length = fs.Length;
-                            fs.Dispose();
+                            bool exists = File.Exists($@"{dir}\{item.fileInfo.Name}");
+
+                            lock(GlobalDefaults.FileLock)
+                                using (FileStream fs = exists ?
+                                    new FileStream($@"{dir}\{item.fileInfo.Name}", FileMode.Append) :
+                                    File.Create($@"{dir}\{item.fileInfo.Name}"))
+                                {
+                                    fs.Write(content, 0, content.Length);
+                                    fs.Flush();
+                                    length = fs.Length;
+                                }
 
                             if (length >= item.fileInfo.Length)
                             {
-                                OnFileRecieve?.Invoke($@"{dir}\{item.fileInfo.Name}");
+                                using (FileStream fs = new FileStream($@"{dir}\{item.fileInfo.Name}", FileMode.Open))
+                                    OnFileRecieve?.Invoke(fs);
                             }
                         }
                         else
@@ -734,7 +743,7 @@ namespace SimpleNetwork
             IsConnected = false;
             try
             {
-                OnDisconnect?.Invoke(DisconnectionMode, connectionInfo);
+                Task.Run(() => OnDisconnect?.Invoke(DisconnectionMode, connectionInfo));
             }
             catch
             {

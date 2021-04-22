@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -27,7 +28,7 @@ namespace SimpleNetwork
 
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
         public delegate void ClientConnected(ConnectionInfo inf, ushort index);
-        public delegate void RecievedFile(string path, ConnectionInfo info);
+        public delegate void RecievedFile(FileStream file, ConnectionInfo info);
         public delegate void RecievedObject(object obj, ConnectionInfo info);
 
         public event ClientDisconnected OnClientDisconnect;
@@ -80,27 +81,26 @@ namespace SimpleNetwork
 
                         ConnectingClient = true;
 
-                        lock(LockObject)
+                        if (Running)
                         {
-                            if (Running)
-                            {
-                                Clients.Add(c);
-                                c.OnDisconnect += ClientDisconnect;
+                            c.OnDisconnect += ClientDisconnect;
 
-                                if (OnClientRecieveFile != null)
-                                    c.OnFileRecieve += (string path) => OnClientRecieveFile.Invoke(path, c.connectionInfo);
-                                if (OnClientRecieveObject != null)
-                                    c.OnRecieveObject += (object obj) => OnClientRecieveObject?.Invoke(obj, c.connectionInfo);
+                            if (OnClientRecieveFile != null)
+                                c.OnFileRecieve += (FileStream file) => OnClientRecieveFile.Invoke(file, c.connectionInfo);
+                            if (OnClientRecieveObject != null)
+                                c.OnRecieveObject += (object obj) => OnClientRecieveObject?.Invoke(obj, c.connectionInfo);
 
-                                c.UpdateWaitTime = ClientUpdateWaitTime;
-                            }                                
-                            else
-                                c.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
+                            c.UpdateWaitTime = ClientUpdateWaitTime;
+                        }                                
+                        else
+                            c.Disconnect(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.REMOVE });
+                       
+                        lock(LockObject)
+                            Clients.Add(c);
 
-                            ConnectingClient = false;
-                            if (c.IsConnected)
-                                OnClientConnect?.Invoke(c.connectionInfo, (ushort)(ClientCount - 1));
-                        }
+                        ConnectingClient = false;
+                        if (c.IsConnected)
+                            OnClientConnect?.Invoke(c.connectionInfo, (ushort)(ClientCount - 1));
                     }
                     catch (SocketException)
                     {
@@ -352,7 +352,6 @@ namespace SimpleNetwork
             {
                 while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
                 lock (LockObject)
-                    lock (LockObject)
                 {
                     Clients.RemoveAt(index);
                     if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();
@@ -367,7 +366,6 @@ namespace SimpleNetwork
             {
                 while (GlobalDefaults.UseEncryption && !Clients[index].RecivedKey) ;
                 lock (LockObject)
-                    lock (LockObject)
                 {
                     Clients.RemoveAt(index);
                     if (RestartAutomatically && !Running && ClientCount < MaxClients) StartServer();

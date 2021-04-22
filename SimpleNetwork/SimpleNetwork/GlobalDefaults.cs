@@ -13,10 +13,13 @@ namespace SimpleNetwork
         public static MessagePack.MessagePackSerializerOptions SerializerOptions = MessagePack.Resolvers.ContractlessStandardResolver.Options;
         public static string FileDirectory { get; set; } = Directory.GetCurrentDirectory() + "\\SentFiles";
 
+        internal static object FileLock = 0;
+
         public static void ClearSentFiles()
         {
-            if (Directory.Exists(FileDirectory))
-                Directory.Delete(FileDirectory, true);
+            lock (FileLock)
+                if (Directory.Exists(FileDirectory))
+                    Directory.Delete(FileDirectory, true);
         }
 
         public enum ForcibleDisconnectBehavior
