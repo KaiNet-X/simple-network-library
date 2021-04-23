@@ -1,15 +1,12 @@
 ﻿using SimpleNetwork;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
-using Xunit;
 
 namespace NetworkingTest
 {
-    static class TestDefaults
+    public static class TestDefaults
     {
         static GlobalDefaults.EncodingType enc = GlobalDefaults.EncodingType.MESSAGE_PACK;
         static bool OneThread = true;
@@ -23,6 +20,7 @@ namespace NetworkingTest
             GlobalDefaults.ObjectEncodingType = enc;
             GlobalDefaults.RunServerClientsOnOneThread = OneThread;
             GlobalDefaults.UseEncryption = UseEncryption;
+            GlobalDefaults.ClearSentFiles();
         }
 
         public static Server GetServer(int clientCap = 1)
@@ -42,7 +40,6 @@ namespace NetworkingTest
             return clients;
         }
 
-
         public static bool WaitForCondition(Condition c, int maxMS = 3000)
         {
             Stopwatch watch = new Stopwatch();
@@ -51,6 +48,7 @@ namespace NetworkingTest
             while (!(b = c()) && watch.ElapsedMilliseconds < maxMS) ;
             return b;
         }
+
         public static bool TimeOut(Action a, int maxMS = 3000)
         {
             Stopwatch watch = new Stopwatch();
@@ -61,5 +59,36 @@ namespace NetworkingTest
             return tsk.IsCompleted;
         }
 
+        public abstract class TestBase
+        {
+            public int ID = 6;
+            public string Foo = "FOO";
+
+            public abstract string GetFoo();
+            public virtual int GetID() => ID;
+        }
+
+        public interface TestInterface
+        {
+            public string Str { get; set; }
+            public int GetVal();
+
+        }
+
+        public class TestClass : TestBase, TestInterface
+        {
+            public string st;
+            public string Str { get => st; set => st = value; }
+
+            public override string GetFoo()
+            {
+                return Foo;
+            }
+
+            public int GetVal()
+            {
+                return ID;
+            }
+        }
     }
 }

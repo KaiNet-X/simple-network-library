@@ -6,6 +6,7 @@ using System.Threading;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 
 namespace SimpleNetwork
 {
@@ -14,7 +15,6 @@ namespace SimpleNetwork
         private Thread BackgroundWorker;
         private Socket Connection;
         private List<object> ObjectQueue = new List<object>();
-        private Dictionary<string, Type> NameTypeAssociations = new Dictionary<string, Type>();
 
         private RSAParameters RSAKey;
         private byte[] Key;
@@ -30,15 +30,14 @@ namespace SimpleNetwork
         public DisconnectionContext DisconnectionMode { get; private set; }
 
         public delegate void Disconnected(DisconnectionContext ctx, ConnectionInfo inf);
-        public delegate void RecievedFile(FileStream file);
+        public delegate void RecievedFile(SimpleFile file);
         public delegate void Connected(ConnectionInfo inf);
         public delegate bool ConnectException(SocketException ex, uint attempts);
         public delegate void RecievedObject(object obj);
-        //internal delegate void RecievedFileServer(string path, ConnectionInfo info);
 
         public event Disconnected OnDisconnect;
         public event Connected OnConnect;
-        public event RecievedFile OnFileRecieve;
+        public RecievedFile OnFileRecieve;
         public event RecievedObject OnRecieveObject;
         public ConnectException OnConnectError;
         //internal event RecievedFileServer OnServerRecieve;
@@ -437,7 +436,8 @@ namespace SimpleNetwork
                     DisconnectedFrom(new DisconnectionContext { type = DisconnectionContext.DisconnectionType.FORCIBLE });
                 }
             }
-            await t.ConfigureAwait(false);
+            if (t != null)
+                await t.ConfigureAwait(false);
         }
 
         public T PullObject<T>()
@@ -607,7 +607,7 @@ namespace SimpleNetwork
 
                 foreach (var item in objects)
                 {
-                    Type type = item.Type != null ? GetTypeFromName(item.Type) : null;
+                    Type type = item.Type != null ? Utilities.GetTypeFromName(item.Type) : null;
 
                     if (!RecivedKey && GlobalDefaults.UseEncryption)
                     {
@@ -658,7 +658,9 @@ namespace SimpleNetwork
                             if (length >= item.fileInfo.Length)
                             {
                                 using (FileStream fs = new FileStream($@"{dir}\{item.fileInfo.Name}", FileMode.Open))
-                                    OnFileRecieve?.Invoke(fs);
+                                {
+                                    OnFileRecieve?.Invoke(new SimpleFile(fs));
+                                }
                             }
                         }
                         else
@@ -700,18 +702,6 @@ namespace SimpleNetwork
                     }
                 }
                 yield return null;
-            }
-        }
-
-        private Type GetTypeFromName(string name)
-        {
-            if (NameTypeAssociations.ContainsKey(name))
-                return NameTypeAssociations[name];
-            else
-            {
-                Type t = Utilities.ResolveTypeFromName(name);
-                NameTypeAssociations.Add(name, t);
-                return t;
             }
         }
 

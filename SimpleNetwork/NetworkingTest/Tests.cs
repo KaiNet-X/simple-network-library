@@ -13,7 +13,6 @@ namespace NetworkingTest
     {
         int Disconnections = 0;
         int Connections = 0;
-        int files = 0;
 
         [Fact]
         public void ClientConnects()
@@ -109,7 +108,7 @@ namespace NetworkingTest
             TestDefaults.SetGlobalDefaults();
 
             Server S = TestDefaults.GetServer();
-            S.OnClientConnect += S_OnClientConnect;
+            S.OnClientConnect += ServerClientConnect;
             S.StartServer();
 
             Client c = new Client();
@@ -269,30 +268,36 @@ namespace NetworkingTest
         }
 
         [Fact]
-        public void ClientSendsFile()
+        public void RecievesInherited()
         {
             TestDefaults.SetGlobalDefaults();
 
-            Server s = TestDefaults.GetServer();
-            s.StartServer();
+            Server S = TestDefaults.GetServer();
+            S.StartServer();
 
             Client c = new Client();
-            c.OnFileRecieve += C_OnFileRecieve;
             c.Connect(IPAddress.Loopback, 9090);
 
-            GlobalDefaults.ClearSentFiles();
+            var test = new TestDefaults.TestClass() { ID = 42, Foo = "foos", Str = "String"};
 
-            string path = Directory.GetCurrentDirectory();
-            string f = Directory.GetFiles(path)[0];
-            s.SendFileToAll(f);
+            S.SendToAll(test);
+            S.SendToAll(test);
+            S.SendToAll(test);
+            S.SendToAll(test);
+
+            Assert.True(TestDefaults.TimeOut(() =>
+            {
+                var v1 = c.WaitForPullObject<TestDefaults.TestClass>();
+                var v2 = c.WaitForPullObject<TestDefaults.TestBase>();
+                var v3 = c.WaitForPullObject<TestDefaults.TestInterface>();
+                var v4 = c.WaitForPullObject<object>();
+                while (v1.ID != 42 || v1.GetFoo() != "foos" || v1.st != "String") ;
+                while (v2.GetFoo() != "foos" || v2.GetID() != 42) ;
+                while (v3.GetVal() != 42 || v3.Str != "String") ;
+                while ((v4 as TestDefaults.TestClass).ID != 42) ;
+            }, 50000));
         }
-
-        private void C_OnFileRecieve(string path)
-        {
-            files++;
-        }
-
-        private void S_OnClientConnect(ConnectionInfo inf, ushort index)
+        private void ServerClientConnect(ConnectionInfo inf, ushort index)
         {
             Connections++;
         }

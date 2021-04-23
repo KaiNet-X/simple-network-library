@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -13,10 +12,6 @@ namespace NetworkingTest
 {
     public class TestsAsync
     {
-        int Disconnections = 0;
-        int Connections = 0;
-        int files = 0;
-
         [Fact]
         public async Task ClientConnectsAsync()
         {
@@ -168,40 +163,6 @@ namespace NetworkingTest
             object[] q2 = await c2.GetQueueObjectsTypelessAsync();
 
             Assert.True(q1.Length == q2.Length);
-        }
-
-        [Fact]
-        public async Task ClientSendsFileAsync()
-        {
-            TestDefaults.SetGlobalDefaults();
-
-            Server s = TestDefaults.GetServer();
-            s.StartServer();
-
-            Client c = new Client();
-            c.OnFileRecieve += C_OnFileRecieve;
-            c.Connect(IPAddress.Loopback, 9090);
-
-            GlobalDefaults.ClearSentFiles();
-
-            string path = Directory.GetCurrentDirectory();
-            string f = Directory.GetFiles(path)[0];
-            await s.SendFileToAllAsync(f);
-        }
-
-        private void C_OnFileRecieve(string path)
-        {
-            files++;
-        }
-
-        private void OnConnect(ConnectionInfo inf)
-        {
-            Connections++;
-        }
-
-        private void OnDisconnect(DisconnectionContext ctx, ConnectionInfo inf)
-        {
-            Disconnections++;
         }
     }
 }

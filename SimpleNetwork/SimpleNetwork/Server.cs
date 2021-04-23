@@ -28,12 +28,12 @@ namespace SimpleNetwork
 
         public delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf);
         public delegate void ClientConnected(ConnectionInfo inf, ushort index);
-        public delegate void RecievedFile(FileStream file, ConnectionInfo info);
+        public delegate void RecievedFile(SimpleFile file, ConnectionInfo info);
         public delegate void RecievedObject(object obj, ConnectionInfo info);
 
         public event ClientDisconnected OnClientDisconnect;
         public event ClientConnected OnClientConnect;
-        public event RecievedFile OnClientRecieveFile;
+        public RecievedFile OnClientRecieveFile;
         public event RecievedObject OnClientRecieveObject;
 
         public ClientAccessor ReadonlyClients;
@@ -57,7 +57,7 @@ namespace SimpleNetwork
 
         public Server(string iPAddress, int PortNum, ushort MaxClients) : this(IPAddress.Parse(iPAddress), PortNum, MaxClients)
         {
-            
+
         }
 
         public void StartServer()
@@ -86,7 +86,7 @@ namespace SimpleNetwork
                             c.OnDisconnect += ClientDisconnect;
 
                             if (OnClientRecieveFile != null)
-                                c.OnFileRecieve += (FileStream file) => OnClientRecieveFile.Invoke(file, c.connectionInfo);
+                                c.OnFileRecieve = (SimpleFile file) => OnClientRecieveFile.Invoke(file, c.connectionInfo);
                             if (OnClientRecieveObject != null)
                                 c.OnRecieveObject += (object obj) => OnClientRecieveObject?.Invoke(obj, c.connectionInfo);
 

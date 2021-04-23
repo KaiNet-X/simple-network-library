@@ -11,6 +11,8 @@ namespace SimpleNetwork
 {
     internal static class Utilities
     {
+        public static Dictionary<string, Type> NameTypeAssociations = new Dictionary<string, Type>();
+
         //public static string CleanJson(string json, ref bool IsValid)
         //{
         //    List<string> SplitObjects = new List<string>(json.Split('{', '}'));
@@ -90,6 +92,25 @@ namespace SimpleNetwork
 
         public static bool IsArray(string typeName) => typeName.Contains('[');
 
+        public static Type GetTypeFromName(string name)
+        {
+            if (NameTypeAssociations.ContainsKey(name))
+                return NameTypeAssociations[name];
+            else
+            {
+                Type t = ResolveTypeFromName(name);
+                try
+                {
+                    NameTypeAssociations.Add(name, t);
+                }
+                catch
+                {
+                    return NameTypeAssociations[name];
+                }
+                return t;
+            }
+        }
+
         public static Type ResolveTypeFromName(string name)
         {
             Type type = AppDomain.CurrentDomain.GetAssemblies()
@@ -148,6 +169,20 @@ namespace SimpleNetwork
             }, null);
             
             return tcs.Task;
+        }
+
+        public static void RecursiveDelete(string path)
+        {
+            if (Directory.Exists(path))
+            {
+                foreach (string s in Directory.GetFiles(path))
+                {
+                    File.SetAttributes(path, FileAttributes.Normal);
+                    File.Delete(s);
+                }
+                foreach (string s in Directory.GetDirectories(path))
+                    RecursiveDelete(s);
+            }
         }
     }
 }
