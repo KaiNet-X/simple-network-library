@@ -209,8 +209,8 @@ delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf)
 // accessed in the server
 delegate void ClientConnected(ConnectionInfo inf, ushort index)
 
-// Provides the path of the file and the connection info who recieved the file
-delegate void RecievedFile(string path, ConnectionInfo info)
+// Provides the file and the connection info who recieved the file
+delegate void RecievedFile(SimpleFile file, ConnectionInfo info)
 
 // Provides the latest object and the conenctioninfo for the client that recieved it
 public delegate void RecievedObject(object obj, ConnectionInfo info)
@@ -222,7 +222,7 @@ event ClientDisconnected OnClientDisconnect
 event ClientConnected OnClientConnect
 
 // Invoked when a client recieves a file
-event RecievedFile OnClientRecieveFile
+RecievedFile OnClientRecieveFile
 
 // Invoked when a client recieves an object. If there are any listeners, objects are not
 // stored in the queue
@@ -337,8 +337,8 @@ DisconnectionContext DisconnectionMode
 // Provides disconnection context and info
 delegate void Disconnected(DisconnectionContext ctx, ConnectionInfo inf)
 
-// Provides file path
-delegate void RecievedFile(string path)
+// Provides file
+delegate void RecievedFile(SimpleFile file)
 
 // Provides ConnectionInfo
 delegate void Connected(ConnectionInfo inf)
@@ -357,7 +357,7 @@ event Disconnected OnDisconnect
 event Connected OnConnect
 
 // Invoked when client recievs a file
-event RecievedFile OnFileRecieve
+RecievedFile OnFileRecieve
 
 // Invokes when the client recieves an object. If there are any listeners, Objects are
 // not stored in queue
@@ -419,6 +419,40 @@ MessagePackSerializerOptions Serializer
 // Path where recieved files are stored. By default directory of running
 // running project + \SentFiles
 string FileDirectory
+~~~
+
+### SimpleFile
+-- Passed as the first parameter for the recieve file delegates. Wraps a filestream and has methods for easily working with it. Automatically disposed after the function finishes.
+
+##### Properties/Fields
+~~~
+// Readonly filestream object
+public FileStream Stream
+
+// Fully qualified path of the file
+public string FullPath
+
+// Name of file
+public string Name
+
+// Extension of file
+public string Extension
+~~~
+
+##### Methods
+~~~
+// deletes the file
+Delete()
+
+// Copies the file to specified path. Optionally sets its name and overwrites file with
+// same name and extension.
+CopyToPath(string NewPath, string Name = null, bool OverwriteFile = false)
+
+// Same as CopyToPath, only deletes the file at the end.
+MoveToPath(string NewPath, string Name = null, bool OverwriteFile = false)
+
+// Releases resources
+Dispose()
 ~~~
 
 ### DisconnectionContext
