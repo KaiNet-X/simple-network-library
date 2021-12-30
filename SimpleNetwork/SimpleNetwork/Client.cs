@@ -6,15 +6,14 @@ using System.Threading;
 using System.IO;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using System.Runtime.CompilerServices;
 
 namespace SimpleNetwork
 {
     public class Client
     {
         private Thread BackgroundWorker;
-        private Socket Connection;
-        private List<object> ObjectQueue = new List<object>();
+        private volatile Socket Connection;
+        private volatile List<object> ObjectQueue = new List<object>();
 
         private RSAParameters RSAKey;
         private byte[] Key;

@@ -7,7 +7,7 @@ using System.Net;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading;
-using System.Windows.Forms;
+//using System.Windows.Forms;
 
 namespace NetworkTester
 {
@@ -18,12 +18,23 @@ namespace NetworkTester
         static void Main(string[] args)
         {
             S.OnClientRecieveFile += S_OnClientRecieveFile;
+            S.OnClientRecieveObject += (obj, d) => Console.WriteLine(obj);
             S.StartServer();
 
             Client c = new Client();
             c.Connect(IPAddress.Loopback, 8888);
-            string f = @"C:\Users\Kai\Desktop\MassPrint.PNG";
-            c.SendFile(f, "NAM");
+            c.SendObject("Hello world");
+            c.SendObject(5.5);
+            c.SendObject(6.9f);
+            c.SendObject(0xFF);
+            c.SendObject("Hello world");
+            c.SendObject("Hello world");
+            c.SendObject("Hello world");
+            c.SendObject("Hello world");
+            c.SendObject("Hello world");
+            c.SendObject("Hello world");
+            //string f = @"C:\Users\Kai\Desktop\MassPrint.PNG";
+            //c.SendFile(f, "NAM");
             Console.ReadKey();
         }
 

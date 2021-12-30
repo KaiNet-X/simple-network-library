@@ -16,8 +16,8 @@ namespace SimpleNetwork
         private readonly int Port;
 
         private Thread BackgroundWorker;
-        private Socket ServerSocket;
-        private List<Client> Clients = new List<Client>();
+        private volatile Socket ServerSocket;
+        private volatile List<Client> Clients = new List<Client>();
 
         public int ClientUpdateWaitTime = 150;
         public readonly ushort MaxClients;
