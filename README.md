@@ -1,6 +1,8 @@
 # NOTE
 The successor to this package targeting dotnet 6 has been released
+
 [Repo](https://github.com/KaiNet-X/Network)
+
 [NuGet](https://www.nuget.org/packages/KaiNet.Net/1.0.0)
 
 # Simple network
