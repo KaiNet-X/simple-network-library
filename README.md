@@ -19,7 +19,7 @@ These classes are all you need to get started, but if you want more granular con
 ## Getting started
 So, how do you actually send data?
 No kidding, its as simple as
-~~~
+~~~c#
 Server S = new Server(IPAddress.Loopback, 5454, 1);
 S.StartServer()
 
@@ -33,20 +33,20 @@ T obj = c.WaitForPullObject<T>();
 T is any object type of your chosing. Yes, you no longer have to create some confusing format for sending over sockets and implement it on every single object, you can simply send it and it works.
 
 Now, if you want to send from the client, simply replace
-~~~
+~~~c#
 s.SendToAll(obj);
 
 T obj = c.WaitForPullObject<T>();
 ~~~
 with
-~~~
+~~~c#
 c.SendObject(Test1);
 
 T o1 = S.WaitForPullFromClient<T>(0);
 ~~~
 ## Basic data transfer between applications
 Create your server application
-~~~
+~~~c#
 using System;
 using System.Net;
 using SimpleNetwork;
@@ -74,7 +74,7 @@ namespace ServerAppilcation
 }
 ~~~
 And your client application
-~~~
+~~~c#
 using System;
 using SimpleNetwork;
 using System.Net;
@@ -106,12 +106,12 @@ Now that you have a basic understanding on how this library works, on to the ext
 -- Manages multiple client connections. Has methods for sending to clients, recieving from clients, and events that allow you to track new connections and disconnections.
 
 ##### Constructors
-~~~
+~~~c#
 new Server(IPAddress iPAddress, int PortNum, ushort MaxClients)
 new Server(string iPAddress, int PortNum, ushort MaxClients)
 ~~~
 ##### Server management
-~~~
+~~~c#
 // Starts accepting connections. Stops when max clients have been reached 
 StartServer()
 
@@ -125,7 +125,7 @@ Close()
 ClearDisconnectedClients()
 ~~~
 ##### Work with clients
-~~~
+~~~c#
 // Send object to all clients
 SendToAll<T>(T obj)
 
@@ -188,7 +188,7 @@ DisconnectAllClients(DisconnectionContext ctx, bool remove = false)
 ~~~
 
 ##### Properties/Fields
-~~~
+~~~c#
 // Gets or sets the time between calls to manage clients. Only applicable // when GlobalDefaults.RunServerClientsOnOneThread == true
 int ClientUpdateWaitTime
 
@@ -207,7 +207,7 @@ ClientAccessor ReadonlyClients
 ~~~
 
 ##### Delegates/Events
-~~~
+~~~c#
 // Provides the disconnection context and the conenction info of the
 // client that disconnected
 delegate void ClientDisconnected(DisconnectionContext ctx, ConnectionInfo inf)
@@ -237,7 +237,7 @@ public event RecievedObject OnClientRecieveObject
 ~~~
 
 ##### Subclasses
-~~~
+~~~c#
 // Indexible class for accessing ClientModels
 Server.ClientAccessor
 
@@ -252,12 +252,12 @@ Server.ClientAccessor.ClientModel
 -- Connects to a server, sends and recieves data with server.
 
 ##### Constructor
-~~~
+~~~c#
 new Client();
 ~~~
 ##### Work with data
 
-~~~
+~~~c#
 // Sends a c# object over the network
 SendObject<T>(T obj)
 
@@ -292,7 +292,7 @@ Task<T[]> GetQueueObjectsTypedAsync<T>(bool clear = false)
 ~~~
 ##### Connection management
 
-~~~
+~~~c#
 // Connect to address at port. Waits until connection is successful.
 Connect(IPAddress address, int port)
 Connect(string address, int port)
@@ -319,7 +319,7 @@ Task ConnectAsync(string address, int port)
 ~~~
 
 ##### Properties/Fields
-~~~
+~~~c#
 // Time in between recieve calls and beginConnect attempts 
 int UpdateWaitTime
 
@@ -340,7 +340,7 @@ DisconnectionContext DisconnectionMode
 ~~~
 
 ##### Delegates/Events
-~~~
+~~~c#
 // Provides disconnection context and info
 delegate void Disconnected(DisconnectionContext ctx, ConnectionInfo inf)
 
@@ -379,7 +379,7 @@ ConnectException OnConnectError
 -- Static class containing several miscelaneous properties, fields, and methods that control connection behaviors
 
 ##### Enums
-~~~
+~~~c#
 public enum ForcibleDisconnectBehavior
 {
 	REMOVE,
@@ -393,13 +393,13 @@ public enum EncodingType
 ~~~
 
 ##### Methods
-~~~
+~~~c#
 // clears all files recieved by simple net
 ClearSentFiles()
 ~~~
 
 ##### Fields/Properties
-~~~
+~~~c#
 // Determines weather the server will keep or remove a client that was
 // forcibly disconnected. By default KEEP
 ForcibleDisconnectBehavior ForcibleDisconnectMode
@@ -432,7 +432,7 @@ string FileDirectory
 -- Passed as the first parameter for the recieve file delegates. Wraps a filestream and has methods for easily working with it. Automatically disposed after the function finishes.
 
 ##### Properties/Fields
-~~~
+~~~c#
 // Readonly filestream object
 public FileStream Stream
 
@@ -447,7 +447,7 @@ public string Extension
 ~~~
 
 ##### Methods
-~~~
+~~~c#
 // deletes the file
 Delete()
 
@@ -466,7 +466,7 @@ Dispose()
 -- Sent whenever disconnected, informs the endpoint of disconnection type
 
 ##### Enums
-~~~
+~~~c#
 public enum DisconnectionType
 {
 	CLOSE_CONNECTION,
@@ -476,7 +476,7 @@ public enum DisconnectionType
 ~~~
 
 ##### Properties/Fields
-~~~
+~~~c#
 // Specifies if its simply closing the conenction, removing the client or
 // if it was disconnected by outside circumstances
 DisconnectionType type
@@ -486,7 +486,7 @@ DisconnectionType type
 -- Has information about a connection
 
 ##### Properties/Fields
-~~~
+~~~c#
 // Local IP Address
 IPAddress LocalAddress
 
