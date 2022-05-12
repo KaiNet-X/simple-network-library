@@ -3,7 +3,7 @@ The successor to this package targeting dotnet 6 has been released
 
 [Repo](https://github.com/KaiNet-X/Network)
 
-[NuGet](https://www.nuget.org/packages/KaiNet.Net/1.0.0)
+[NuGet](https://www.nuget.org/packages/KaiNet.Net/)
 
 # Simple network
 SimpleNetwork is a .NET standard library that is compatible with most poject types that greatly simplifies the process of networking. 
